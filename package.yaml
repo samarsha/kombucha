@@ -21,6 +21,7 @@ tests:
     source-dirs: test
     dependencies:
     - hspec
+    - hspec-parsec
     - kombucha
 
 ghc-options:
