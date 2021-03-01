@@ -1,25 +1,29 @@
 module Kombucha.SyntaxTree where
 
 data Declaration
-  = DeclareParameter ResourceSpec
+  = DeclareParameter ParameterSpec
   | DeclareResource ResourceSpec
   | DeclareAxiom Axiom
   | DeclareClaim Claim
 
+data Parameter
+  = ParameterValue String
+  | ParameterVariable Char
+
 data ParameterSpec = ParameterSpec
   { name :: String,
-    parameters :: [String]
+    values :: [String]
   }
 
 data Resource
   = ResourceUnit
-  | ResourceAtom String [String]
+  | ResourceAtom String [Parameter]
   | ResourceTuple [Resource]
   | ResourceVariable Char
 
 data ResourceSpec = ResourceSpec
   { name :: String,
-    parameterTypes :: [String]
+    parameters :: [String]
   }
 
 data Axiom = Axiom
@@ -44,13 +48,19 @@ data Proof = Proof
   }
 
 data Pattern
-  = PatternBinding String
+  = PatternUnit
+  | PatternBinding String
   | PatternTuple [Pattern]
-  | PatternUnit
+
+data Let = Let
+  { pattern :: Pattern,
+    value :: Expr,
+    result :: Expr
+  }
 
 data Expr
-  = ExprTuple [Expr]
+  = ExprUnit
   | ExprVariable String
-  | ExprUnit
-  | ExprLet
+  | ExprTuple [Expr]
+  | ExprLet Let
   | ExprApply String Expr
