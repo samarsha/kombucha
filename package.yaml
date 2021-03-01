@@ -1,0 +1,25 @@
+name: kombucha
+version: 0.1.0.0
+
+dependencies:
+- base
+
+library:
+  source-dirs: src
+
+executables:
+  kombucha:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+    - kombucha
+
+tests:
+  kombucha-test:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+    - kombucha
+
+ghc-options:
+- -Wall
