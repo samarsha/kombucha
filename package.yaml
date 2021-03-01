@@ -3,6 +3,7 @@ version: 0.1.0.0
 
 dependencies:
 - base
+- parsec
 
 library:
   source-dirs: src
@@ -19,6 +20,7 @@ tests:
     main: Spec.hs
     source-dirs: test
     dependencies:
+    - hspec
     - kombucha
 
 ghc-options:
@@ -26,3 +28,4 @@ ghc-options:
 
 default-extensions:
 - DuplicateRecordFields
+- NamedFieldPuns

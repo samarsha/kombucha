@@ -16,6 +16,7 @@ data ParameterSpec = ParameterSpec
   { name :: String,
     values :: TwoOrMore String
   }
+  deriving (Eq, Show)
 
 data Resource
   = ResourceUnit
