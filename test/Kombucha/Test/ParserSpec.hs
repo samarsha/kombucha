@@ -17,3 +17,15 @@ spec = describe "parser" $ do
         { name = "Party",
           values = ("Alice", "Bob") ::| []
         }
+
+    parameterSpec' "parameter Party = Alice | Bob | Charlie"
+      `shouldParse` ParameterSpec
+        { name = "Party",
+          values = ("Alice", "Bob") ::| ["Charlie"]
+        }
+
+    parameterSpec' `shouldFailOn` "parameter Party = Alice | Bob |"
+    parameterSpec' `shouldFailOn` "parameter Party = Alice |"
+    parameterSpec' `shouldFailOn` "parameter Party = Alice"
+    parameterSpec' `shouldFailOn` "parameter Party ="
+    parameterSpec' `shouldFailOn` "parameter Party"
