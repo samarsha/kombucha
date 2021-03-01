@@ -23,3 +23,6 @@ tests:
 
 ghc-options:
 - -Wall
+
+default-extensions:
+- DuplicateRecordFields
