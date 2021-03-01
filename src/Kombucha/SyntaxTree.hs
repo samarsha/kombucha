@@ -1,5 +1,7 @@
 module Kombucha.SyntaxTree where
 
+import Kombucha.TwoOrMore
+
 data Declaration
   = DeclareParameter ParameterSpec
   | DeclareResource ResourceSpec
@@ -12,13 +14,13 @@ data Parameter
 
 data ParameterSpec = ParameterSpec
   { name :: String,
-    values :: [String]
+    values :: TwoOrMore String
   }
 
 data Resource
   = ResourceUnit
   | ResourceAtom String [Parameter]
-  | ResourceTuple [Resource]
+  | ResourceTuple (TwoOrMore Resource)
   | ResourceVariable Char
 
 data ResourceSpec = ResourceSpec
@@ -50,7 +52,7 @@ data Proof = Proof
 data Pattern
   = PatternUnit
   | PatternBinding String
-  | PatternTuple [Pattern]
+  | PatternTuple (TwoOrMore Pattern)
 
 data Let = Let
   { pattern :: Pattern,
@@ -61,6 +63,6 @@ data Let = Let
 data Expr
   = ExprUnit
   | ExprVariable String
-  | ExprTuple [Expr]
+  | ExprTuple (TwoOrMore Expr)
   | ExprLet Let
   | ExprApply String Expr
