@@ -1,4 +1,10 @@
-module Kombucha.Parser (axiom, parameterSpec, resourceSpec) where
+module Kombucha.Parser
+  ( axiom,
+    claim,
+    parameterSpec,
+    resourceSpec,
+  )
+where
 
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
@@ -21,7 +27,7 @@ languageDef =
       identLetter = alphaNum <|> char '_',
       opStart = parserZero,
       opLetter = parserZero,
-      reservedNames = ["axiom", "parameter", "resource"],
+      reservedNames = ["axiom", "claim", "parameter", "proof", "resource"],
       reservedOpNames = [],
       caseSensitive = True
     }
@@ -75,6 +81,17 @@ axiom = do
   inference' <- Kombucha.Parser.inference
   return Axiom {name, inference = inference'}
 
+claim :: Parser Claim
+claim = do
+  reserved "claim"
+  name <- identifier
+  _ <- symbol ":"
+  inference' <- Kombucha.Parser.inference
+  -- TODO: Require newline.
+  -- _ <- newline
+  proof' <- Kombucha.Parser.proof
+  return Claim {name, inference = inference', proof = proof'}
+
 inference :: Parser Inference
 inference = do
   lhs <- resource
@@ -87,3 +104,17 @@ resource = ResourceAtom <$> identifier <*> many parameter
 
 parameter :: Parser Parameter
 parameter = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
+
+proof :: Parser Proof
+proof = do
+  reserved "proof"
+  input <- patternParser
+  _ <- symbol "->"
+  output <- expr
+  return Proof {input, output}
+
+patternParser :: Parser Pattern
+patternParser = PatternBinding <$> identifier
+
+expr :: Parser Expr
+expr = ExprVariable <$> identifier

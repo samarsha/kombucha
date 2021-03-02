@@ -83,3 +83,31 @@ spec = describe "parser" $ do
     axiom' `shouldFailOn` "axiom flip_ebit:"
     axiom' `shouldFailOn` "axiom flip_ebit"
     axiom' `shouldFailOn` "axiom"
+
+  it "parses claims" $ do
+    let claim' = parse claim ""
+
+    claim' "claim identity_qbit: qbit X Y |- qbit X Y\nproof q -> q"
+      `shouldParse` Claim
+        { name = "identity_qbit",
+          inference =
+            Inference
+              { lhs = ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'],
+                rhs = ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
+              },
+          proof =
+            Proof
+              { input = PatternBinding "q",
+                output = ExprVariable "q"
+              }
+        }
+
+    -- TODO: Require newline.
+    -- claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y proof q -> q"
+
+    claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y\nproof q ->"
+    claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y\nproof q"
+    claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y\nproof"
+    claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y"
+    claim' `shouldFailOn` "claim claim: qbit X Y |- qbit X Y"
+    claim' `shouldFailOn` "claim proof: qbit X Y |- qbit X Y"

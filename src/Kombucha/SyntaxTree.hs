@@ -43,6 +43,7 @@ data Claim = Claim
     inference :: Inference,
     proof :: Proof
   }
+  deriving (Eq, Show)
 
 data Inference = Inference
   { lhs :: Resource,
@@ -54,17 +55,20 @@ data Proof = Proof
   { input :: Pattern,
     output :: Expr
   }
+  deriving (Eq, Show)
 
 data Pattern
   = PatternUnit
   | PatternBinding String
   | PatternTuple (TwoOrMore Pattern)
+  deriving (Eq, Show)
 
 data Let = Let
   { pattern :: Pattern,
     value :: Expr,
     result :: Expr
   }
+  deriving (Eq, Show)
 
 data Expr
   = ExprUnit
@@ -72,3 +76,4 @@ data Expr
   | ExprTuple (TwoOrMore Expr)
   | ExprLet Let
   | ExprApply String Expr
+  deriving (Eq, Show)
