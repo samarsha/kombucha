@@ -54,3 +54,32 @@ spec = describe "parser" $ do
 
     resourceSpec' `shouldFailOn` "resource resource"
     resourceSpec' `shouldFailOn` "resource"
+
+  it "parses axioms" $ do
+    let axiom' = parse axiom ""
+
+    axiom' "axiom qbit_to_ebit: qbit X Y |- ebit X Y"
+      `shouldParse` Axiom
+        { name = "qbit_to_ebit",
+          inference =
+            Inference
+              { lhs = ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'],
+                rhs = ResourceAtom "ebit" [ParamVariable 'X', ParamVariable 'Y']
+              }
+        }
+
+    axiom' "axiom flip_ebit: ebit X Y |- ebit Y X"
+      `shouldParse` Axiom
+        { name = "flip_ebit",
+          inference =
+            Inference
+              { lhs = ResourceAtom "ebit" [ParamVariable 'X', ParamVariable 'Y'],
+                rhs = ResourceAtom "ebit" [ParamVariable 'Y', ParamVariable 'X']
+              }
+        }
+
+    axiom' `shouldFailOn` "axiom axiom: qbit X Y |- ebit X Y"
+    axiom' `shouldFailOn` "axiom flip_ebit: ebit X Y"
+    axiom' `shouldFailOn` "axiom flip_ebit:"
+    axiom' `shouldFailOn` "axiom flip_ebit"
+    axiom' `shouldFailOn` "axiom"

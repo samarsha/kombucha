@@ -11,6 +11,7 @@ data Declaration
 data Parameter
   = ParamValue String
   | ParamVariable Char
+  deriving (Eq, Show)
 
 data ParameterSpec = ParameterSpec
   { name :: String,
@@ -23,6 +24,7 @@ data Resource
   | ResourceAtom String [Parameter]
   | ResourceTuple (TwoOrMore Resource)
   | ResourceVariable Char
+  deriving (Eq, Show)
 
 data ResourceSpec = ResourceSpec
   { name :: String,
@@ -34,6 +36,7 @@ data Axiom = Axiom
   { name :: String,
     inference :: Inference
   }
+  deriving (Eq, Show)
 
 data Claim = Claim
   { name :: String,
@@ -45,6 +48,7 @@ data Inference = Inference
   { lhs :: Resource,
     rhs :: Resource
   }
+  deriving (Eq, Show)
 
 data Proof = Proof
   { input :: Pattern,
