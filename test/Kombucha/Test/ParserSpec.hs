@@ -24,6 +24,7 @@ spec = describe "parser" $ do
           values = TwoOrMore "Alice" "Bob" ["Charlie"]
         }
 
+    parameterSpec' `shouldFailOn` "parameter parameter = Alice | Bob"
     parameterSpec' `shouldFailOn` "parameter Party = Alice | Bob |"
     parameterSpec' `shouldFailOn` "parameter Party = Alice |"
     parameterSpec' `shouldFailOn` "parameter Party = Alice"

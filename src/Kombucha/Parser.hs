@@ -4,35 +4,47 @@ import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
 import Text.Parsec
 import Text.Parsec.String
+import Text.Parsec.Token (TokenParser)
+import qualified Text.Parsec.Token as Token
+
+tokenParser :: TokenParser ()
+tokenParser =
+  Token.makeTokenParser
+    Token.LanguageDef
+      { commentStart = "",
+        commentEnd = "",
+        commentLine = "",
+        nestedComments = False,
+        identStart = letter,
+        identLetter = letter,
+        opStart = parserZero,
+        opLetter = parserZero,
+        reservedNames = ["parameter"],
+        reservedOpNames = [],
+        caseSensitive = True
+      }
+
+reserved :: String -> Parser ()
+reserved = Token.reserved tokenParser
+
+identifier :: Parser String
+identifier = Token.identifier tokenParser
+
+symbol :: String -> Parser String
+symbol = Token.symbol tokenParser
+
+sepBy2 :: Parser a -> Parser sep -> Parser (TwoOrMore a)
+sepBy2 p sep = do
+  first <- p
+  _ <- sep
+  second <- p
+  rest <- many $ sep >> p
+  return $ TwoOrMore first second rest
 
 parameterSpec :: Parser ParameterSpec
 parameterSpec = do
-  keyword "parameter"
+  reserved "parameter"
   name <- identifier
-
-  _ <- lexeme $ string "="
-
-  first <- identifier
-  _ <- lexeme $ string "|"
-  second <- identifier
-  rest <- many $ lexeme (string "|") >> identifier
-
-  let values = TwoOrMore first second rest
+  _ <- symbol "="
+  values <- sepBy2 identifier $ symbol "|"
   return ParameterSpec {name, values}
-
-identifier :: Parser String
-identifier = do
-  name <- many1 alphaNum
-  spaces
-  return name
-
-keyword :: String -> Parser ()
-keyword name = lexeme $ do
-  _ <- string name
-  notFollowedBy alphaNum
-
-lexeme :: Parser a -> Parser a
-lexeme parser = do
-  result <- parser
-  spaces
-  return result
