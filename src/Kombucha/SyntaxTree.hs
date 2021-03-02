@@ -9,8 +9,8 @@ data Declaration
   | DeclareClaim Claim
 
 data Parameter
-  = ParameterValue String
-  | ParameterVariable Char
+  = ParamValue String
+  | ParamVariable Char
 
 data ParameterSpec = ParameterSpec
   { name :: String,
@@ -28,6 +28,7 @@ data ResourceSpec = ResourceSpec
   { name :: String,
     parameters :: [String]
   }
+  deriving (Eq, Show)
 
 data Axiom = Axiom
   { name :: String,

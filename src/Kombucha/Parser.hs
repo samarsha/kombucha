@@ -1,4 +1,4 @@
-module Kombucha.Parser (parameterSpec) where
+module Kombucha.Parser (parameterSpec, resourceSpec) where
 
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
@@ -19,7 +19,7 @@ tokenParser =
         identLetter = letter,
         opStart = parserZero,
         opLetter = parserZero,
-        reservedNames = ["parameter"],
+        reservedNames = ["parameter", "resource"],
         reservedOpNames = [],
         caseSensitive = True
       }
@@ -48,3 +48,10 @@ parameterSpec = do
   _ <- symbol "="
   values <- sepBy2 identifier $ symbol "|"
   return ParameterSpec {name, values}
+
+resourceSpec :: Parser ResourceSpec
+resourceSpec = do
+  reserved "resource"
+  name <- identifier
+  parameters <- many identifier
+  return ResourceSpec {name, parameters}

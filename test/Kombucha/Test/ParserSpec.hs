@@ -30,3 +30,27 @@ spec = describe "parser" $ do
     parameterSpec' `shouldFailOn` "parameter Party = Alice"
     parameterSpec' `shouldFailOn` "parameter Party ="
     parameterSpec' `shouldFailOn` "parameter Party"
+
+  it "parses resource declarations" $ do
+    let resourceSpec' = parse resourceSpec ""
+
+    resourceSpec' "resource qbit"
+      `shouldParse` ResourceSpec
+        { name = "qbit",
+          parameters = []
+        }
+
+    resourceSpec' "resource qbit Party"
+      `shouldParse` ResourceSpec
+        { name = "qbit",
+          parameters = ["Party"]
+        }
+
+    resourceSpec' "resource qbit Party Party"
+      `shouldParse` ResourceSpec
+        { name = "qbit",
+          parameters = ["Party", "Party"]
+        }
+
+    resourceSpec' `shouldFailOn` "resource resource"
+    resourceSpec' `shouldFailOn` "resource"
