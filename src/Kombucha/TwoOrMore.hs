@@ -1,4 +1,4 @@
 module Kombucha.TwoOrMore where
 
-data TwoOrMore a = (a, a) ::| [a]
+data TwoOrMore a = TwoOrMore a a [a]
   deriving (Eq, Show)

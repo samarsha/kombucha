@@ -15,13 +15,13 @@ spec = describe "parser" $ do
     parameterSpec' "parameter Party = Alice | Bob"
       `shouldParse` ParameterSpec
         { name = "Party",
-          values = ("Alice", "Bob") ::| []
+          values = TwoOrMore "Alice" "Bob" []
         }
 
     parameterSpec' "parameter Party = Alice | Bob | Charlie"
       `shouldParse` ParameterSpec
         { name = "Party",
-          values = ("Alice", "Bob") ::| ["Charlie"]
+          values = TwoOrMore "Alice" "Bob" ["Charlie"]
         }
 
     parameterSpec' `shouldFailOn` "parameter Party = Alice | Bob |"

@@ -17,7 +17,7 @@ parameterSpec = do
   second <- identifier
   rest <- many $ lexeme (string "|") >> identifier
 
-  let values = (first, second) ::| rest
+  let values = TwoOrMore first second rest
   return ParameterSpec {name, values}
 
 identifier :: Parser String
