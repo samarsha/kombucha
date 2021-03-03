@@ -103,7 +103,7 @@ parseInference = do
   lhs <- resource
   symbol "|-"
   rhs <- resource
-  return Inference {lhs, rhs}
+  return $ lhs `Infers` rhs
 
 resource :: Parser Resource
 resource = ResourceAtom <$> identifier <*> many parameter

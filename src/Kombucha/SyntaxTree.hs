@@ -45,10 +45,7 @@ data Claim = Claim
   }
   deriving (Eq, Show)
 
-data Inference = Inference
-  { lhs :: Resource,
-    rhs :: Resource
-  }
+data Inference = Resource `Infers` Resource
   deriving (Eq, Show)
 
 data Proof = Proof
@@ -77,3 +74,8 @@ data Expr
   | ExprLet Let
   | ExprApply String Expr
   deriving (Eq, Show)
+
+data Type
+  = TypeInference Inference
+  | TypeResource Resource
+  | TypeParam Parameter
