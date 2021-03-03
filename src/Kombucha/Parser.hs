@@ -56,8 +56,8 @@ parens = Token.parens tokenParser
 natural :: Parser Integer
 natural = Token.natural tokenParser
 
-singleLetter :: Parser Char
-singleLetter = lexeme $ do
+variable :: Parser Variable
+variable = lexeme $ do
   l <- letter
   notFollowedBy $ Token.identLetter languageDef
   return l
@@ -122,7 +122,7 @@ resourceTerm :: Parser Resource
 resourceTerm =
   parens resource
     <|> try resourceRepeat
-    <|> ResourceVariable <$> try singleLetter
+    <|> ResourceVariable <$> try variable
     <|> ResourceAtom <$> identifier <*> many param
 
 resourceRepeat :: Parser Resource
@@ -137,7 +137,7 @@ resourceRepeat = do
 
 param :: Parser Param
 param =
-  ParamVariable <$> try singleLetter
+  ParamVariable <$> try variable
     <|> ParamValue <$> identifier
 
 parseProof :: Parser Proof
@@ -158,7 +158,7 @@ patternTerm :: Parser Pattern
 patternTerm =
   parens parsePattern
     <|> (symbol "0" >> return PatternUnit)
-    <|> PatternBinding <$> identifier
+    <|> PatternBind <$> identifier
 
 expr :: Parser Expr
 expr = ExprVariable <$> identifier

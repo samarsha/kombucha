@@ -179,7 +179,7 @@ spec = describe "parser" $ do
           inference =
             ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
               `Infers` ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'],
-          proof = PatternBinding "q" `Proves` ExprVariable "q"
+          proof = PatternBind "q" `Proves` ExprVariable "q"
         }
 
     claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y; proof q -> q"
@@ -195,22 +195,22 @@ spec = describe "parser" $ do
     let pattern' = parse parsePattern ""
 
     pattern' "0" `shouldParse` PatternUnit
-    pattern' "a" `shouldParse` PatternBinding "a"
-    pattern' "(a)" `shouldParse` PatternBinding "a"
-    pattern' "a + b" `shouldParse` PatternTuple (TwoOrMore (PatternBinding "a") (PatternBinding "b") [])
+    pattern' "a" `shouldParse` PatternBind "a"
+    pattern' "(a)" `shouldParse` PatternBind "a"
+    pattern' "a + b" `shouldParse` PatternTuple (TwoOrMore (PatternBind "a") (PatternBind "b") [])
 
     pattern' "(a + b) + c"
       `shouldParse` PatternTuple
         ( TwoOrMore
-            (PatternTuple $ TwoOrMore (PatternBinding "a") (PatternBinding "b") [])
-            (PatternBinding "c")
+            (PatternTuple $ TwoOrMore (PatternBind "a") (PatternBind "b") [])
+            (PatternBind "c")
             []
         )
 
     pattern' "(a1 + a2) + (b1 + b2 + b3)"
       `shouldParse` PatternTuple
         ( TwoOrMore
-            (PatternTuple $ TwoOrMore (PatternBinding "a1") (PatternBinding "a2") [])
-            (PatternTuple $ TwoOrMore (PatternBinding "b1") (PatternBinding "b2") [PatternBinding "b3"])
+            (PatternTuple $ TwoOrMore (PatternBind "a1") (PatternBind "a2") [])
+            (PatternTuple $ TwoOrMore (PatternBind "b1") (PatternBind "b2") [PatternBind "b3"])
             []
         )

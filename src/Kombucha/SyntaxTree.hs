@@ -8,9 +8,11 @@ data Declaration
   | DeclareAxiom Axiom
   | DeclareClaim Claim
 
+type Variable = Char
+
 data Param
   = ParamValue String
-  | ParamVariable Char
+  | ParamVariable Variable
   deriving (Eq, Show)
 
 data ParamSpec = ParamSpec
@@ -23,7 +25,7 @@ data Resource
   = ResourceUnit
   | ResourceAtom String [Param]
   | ResourceTuple (TwoOrMore Resource)
-  | ResourceVariable Char
+  | ResourceVariable Variable
   deriving (Eq, Show)
 
 data ResourceSpec = ResourceSpec
@@ -53,7 +55,7 @@ data Proof = Pattern `Proves` Expr
 
 data Pattern
   = PatternUnit
-  | PatternBinding String
+  | PatternBind String
   | PatternTuple (TwoOrMore Pattern)
   deriving (Eq, Show)
 
@@ -76,3 +78,4 @@ data Type
   = TypeInference Inference
   | TypeResource Resource
   | TypeParam Param
+  | TypeVariable Variable
