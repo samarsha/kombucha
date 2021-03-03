@@ -84,22 +84,22 @@ axiom = do
   reserved "axiom"
   name <- identifier
   symbol ":"
-  inference' <- Kombucha.Parser.inference
+  inference <- parseInference
   semi
-  return Axiom {name, inference = inference'}
+  return Axiom {name, inference}
 
 claim :: Parser Claim
 claim = do
   reserved "claim"
   name <- identifier
   symbol ":"
-  inference' <- Kombucha.Parser.inference
+  inference <- parseInference
   semi
-  proof' <- Kombucha.Parser.proof
-  return Claim {name, inference = inference', proof = proof'}
+  proof <- parseProof
+  return Claim {name, inference, proof}
 
-inference :: Parser Inference
-inference = do
+parseInference :: Parser Inference
+parseInference = do
   lhs <- resource
   symbol "|-"
   rhs <- resource
@@ -111,17 +111,17 @@ resource = ResourceAtom <$> identifier <*> many parameter
 parameter :: Parser Parameter
 parameter = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
 
-proof :: Parser Proof
-proof = do
+parseProof :: Parser Proof
+parseProof = do
   reserved "proof"
-  input <- patternParser
+  input <- parsePattern
   symbol "->"
   output <- expr
   semi
   return Proof {input, output}
 
-patternParser :: Parser Pattern
-patternParser = PatternBinding <$> identifier
+parsePattern :: Parser Pattern
+parsePattern = PatternBinding <$> identifier
 
 expr :: Parser Expr
 expr = ExprVariable <$> identifier
