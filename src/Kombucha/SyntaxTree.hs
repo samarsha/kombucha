@@ -3,17 +3,17 @@ module Kombucha.SyntaxTree where
 import Kombucha.TwoOrMore
 
 data Declaration
-  = DeclareParameter ParameterSpec
+  = DeclareParam ParamSpec
   | DeclareResource ResourceSpec
   | DeclareAxiom Axiom
   | DeclareClaim Claim
 
-data Parameter
+data Param
   = ParamValue String
   | ParamVariable Char
   deriving (Eq, Show)
 
-data ParameterSpec = ParameterSpec
+data ParamSpec = ParamSpec
   { name :: String,
     values :: TwoOrMore String
   }
@@ -21,7 +21,7 @@ data ParameterSpec = ParameterSpec
 
 data Resource
   = ResourceUnit
-  | ResourceAtom String [Parameter]
+  | ResourceAtom String [Param]
   | ResourceTuple (TwoOrMore Resource)
   | ResourceVariable Char
   deriving (Eq, Show)
@@ -78,4 +78,4 @@ data Expr
 data Type
   = TypeInference Inference
   | TypeResource Resource
-  | TypeParam Parameter
+  | TypeParam Param

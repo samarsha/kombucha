@@ -10,27 +10,27 @@ import Text.Parsec
 spec :: Spec
 spec = describe "parser" $ do
   it "parses parameter declarations" $ do
-    let parameterSpec' = parse parameterSpec ""
+    let paramSpec' = parse paramSpec ""
 
-    parameterSpec' "parameter Party = Alice | Bob;"
-      `shouldParse` ParameterSpec
+    paramSpec' "parameter Party = Alice | Bob;"
+      `shouldParse` ParamSpec
         { name = "Party",
           values = TwoOrMore "Alice" "Bob" []
         }
 
-    parameterSpec' "parameter Party = Alice | Bob | Charlie;"
-      `shouldParse` ParameterSpec
+    paramSpec' "parameter Party = Alice | Bob | Charlie;"
+      `shouldParse` ParamSpec
         { name = "Party",
           values = TwoOrMore "Alice" "Bob" ["Charlie"]
         }
 
-    parameterSpec' `shouldFailOn` "parameter parameter = Alice | Bob;"
-    parameterSpec' `shouldFailOn` "parameter Party = Alice | Bob |"
-    parameterSpec' `shouldFailOn` "parameter Party = Alice | Bob"
-    parameterSpec' `shouldFailOn` "parameter Party = Alice |"
-    parameterSpec' `shouldFailOn` "parameter Party = Alice;"
-    parameterSpec' `shouldFailOn` "parameter Party ="
-    parameterSpec' `shouldFailOn` "parameter Party;"
+    paramSpec' `shouldFailOn` "parameter parameter = Alice | Bob;"
+    paramSpec' `shouldFailOn` "parameter Party = Alice | Bob |"
+    paramSpec' `shouldFailOn` "parameter Party = Alice | Bob"
+    paramSpec' `shouldFailOn` "parameter Party = Alice |"
+    paramSpec' `shouldFailOn` "parameter Party = Alice;"
+    paramSpec' `shouldFailOn` "parameter Party ="
+    paramSpec' `shouldFailOn` "parameter Party;"
 
   it "parses resource declarations" $ do
     let resourceSpec' = parse resourceSpec ""

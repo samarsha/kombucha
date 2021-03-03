@@ -1,7 +1,7 @@
 module Kombucha.Parser
   ( axiom,
     claim,
-    parameterSpec,
+    paramSpec,
     resourceSpec,
   )
 where
@@ -62,14 +62,14 @@ sepBy2 p sep = do
   rest <- many $ sep >> p
   return $ TwoOrMore first second rest
 
-parameterSpec :: Parser ParameterSpec
-parameterSpec = do
+paramSpec :: Parser ParamSpec
+paramSpec = do
   reserved "parameter"
   name <- identifier
   symbol "="
   values <- sepBy2 identifier $ symbol "|"
   semi
-  return ParameterSpec {name, values}
+  return ParamSpec {name, values}
 
 resourceSpec :: Parser ResourceSpec
 resourceSpec = do
@@ -106,10 +106,10 @@ parseInference = do
   return $ lhs `Infers` rhs
 
 resource :: Parser Resource
-resource = ResourceAtom <$> identifier <*> many parameter
+resource = ResourceAtom <$> identifier <*> many param
 
-parameter :: Parser Parameter
-parameter = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
+param :: Parser Param
+param = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
 
 parseProof :: Parser Proof
 parseProof = do
