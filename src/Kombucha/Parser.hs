@@ -114,11 +114,11 @@ param = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
 parseProof :: Parser Proof
 parseProof = do
   reserved "proof"
-  input <- parsePattern
+  lhs <- parsePattern
   symbol "->"
-  output <- expr
+  rhs <- expr
   semi
-  return Proof {input, output}
+  return $ lhs `Proves` rhs
 
 parsePattern :: Parser Pattern
 parsePattern = PatternBinding <$> identifier

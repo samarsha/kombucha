@@ -91,11 +91,7 @@ spec = describe "parser" $ do
           inference =
             ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
               `Infers` ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'],
-          proof =
-            Proof
-              { input = PatternBinding "q",
-                output = ExprVariable "q"
-              }
+          proof = PatternBinding "q" `Proves` ExprVariable "q"
         }
 
     claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y; proof q -> q"

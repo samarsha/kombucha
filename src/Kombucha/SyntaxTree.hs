@@ -48,10 +48,7 @@ data Claim = Claim
 data Inference = Resource `Infers` Resource
   deriving (Eq, Show)
 
-data Proof = Proof
-  { input :: Pattern,
-    output :: Expr
-  }
+data Proof = Pattern `Proves` Expr
   deriving (Eq, Show)
 
 data Pattern
