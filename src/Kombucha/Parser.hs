@@ -52,6 +52,9 @@ semi = void $ Token.semi tokenParser
 parens :: Parser a -> Parser a
 parens = Token.parens tokenParser
 
+natural :: Parser Integer
+natural = Token.natural tokenParser
+
 singleLetter :: Parser Char
 singleLetter = lexeme $ do
   l <- letter
@@ -111,17 +114,30 @@ parseInference = do
 
 resource :: Parser Resource
 resource =
-  (ResourceTuple <$> try (sepBy2 resourceTerm $ symbol "+"))
+  ResourceTuple <$> try (sepBy2 resourceTerm $ symbol "+")
     <|> resourceTerm
 
 resourceTerm :: Parser Resource
 resourceTerm =
-  (ResourceVariable <$> try singleLetter)
-    <|> (ResourceAtom <$> identifier <*> many param)
-    <|> parens resource
+  parens resource
+    <|> try resourceRepeat
+    <|> ResourceVariable <$> try singleLetter
+    <|> ResourceAtom <$> identifier <*> many param
+
+resourceRepeat :: Parser Resource
+resourceRepeat = do
+  n <- natural
+  case n of
+    0 -> optional resourceTerm >> return ResourceUnit
+    1 -> resourceTerm
+    _ -> do
+      r <- resourceTerm
+      return $ ResourceTuple $ TwoOrMore r r $ replicate (fromInteger $ n - 2) r
 
 param :: Parser Param
-param = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
+param =
+  ParamVariable <$> try singleLetter
+    <|> ParamValue <$> identifier
 
 parseProof :: Parser Proof
 parseProof = do

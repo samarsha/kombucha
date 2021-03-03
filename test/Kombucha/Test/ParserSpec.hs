@@ -95,6 +95,9 @@ spec = describe "parser" $ do
             []
         )
 
+    resource' "0" `shouldParse` ResourceUnit
+    resource' "0 A" `shouldParse` ResourceUnit
+
     resource' "5 A"
       `shouldParse` ResourceTuple
         ( TwoOrMore
@@ -111,11 +114,11 @@ spec = describe "parser" $ do
             []
         )
 
-    resource' "2 A + 3 A"
+    resource' "2 A + 3 B"
       `shouldParse` ResourceTuple
         ( TwoOrMore
             (ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'A') []))
-            (ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'A') [ResourceVariable 'A']))
+            (ResourceTuple (TwoOrMore (ResourceVariable 'B') (ResourceVariable 'B') [ResourceVariable 'B']))
             []
         )
 
