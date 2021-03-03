@@ -60,7 +60,9 @@ spec = describe "parser" $ do
     let resource' = parse resource ""
 
     resource' "A" `shouldParse` ResourceVariable 'A'
+    resource' "(A)" `shouldParse` ResourceVariable 'A'
     resource' "a" `shouldParse` ResourceVariable 'a'
+    resource' "(a)" `shouldParse` ResourceVariable 'a'
 
     resource' "qbit" `shouldParse` ResourceAtom "qbit" []
     resource' "qbit X" `shouldParse` ResourceAtom "qbit" [ParamVariable 'X']
@@ -188,3 +190,27 @@ spec = describe "parser" $ do
     claim' `shouldFailOn` "claim identity_qbit: qbit X Y |- qbit X Y;"
     claim' `shouldFailOn` "claim claim: qbit X Y |- qbit X Y;"
     claim' `shouldFailOn` "claim proof: qbit X Y |- qbit X Y;"
+
+  it "parses patterns" $ do
+    let pattern' = parse parsePattern ""
+
+    pattern' "0" `shouldParse` PatternUnit
+    pattern' "a" `shouldParse` PatternBinding "a"
+    pattern' "(a)" `shouldParse` PatternBinding "a"
+    pattern' "a + b" `shouldParse` PatternTuple (TwoOrMore (PatternBinding "a") (PatternBinding "b") [])
+
+    pattern' "(a + b) + c"
+      `shouldParse` PatternTuple
+        ( TwoOrMore
+            (PatternTuple $ TwoOrMore (PatternBinding "a") (PatternBinding "b") [])
+            (PatternBinding "c")
+            []
+        )
+
+    pattern' "(a1 + a2) + (b1 + b2 + b3)"
+      `shouldParse` PatternTuple
+        ( TwoOrMore
+            (PatternTuple $ TwoOrMore (PatternBinding "a1") (PatternBinding "a2") [])
+            (PatternTuple $ TwoOrMore (PatternBinding "b1") (PatternBinding "b2") [PatternBinding "b3"])
+            []
+        )

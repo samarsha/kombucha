@@ -2,6 +2,7 @@ module Kombucha.Parser
   ( axiom,
     claim,
     paramSpec,
+    parsePattern,
     resource,
     resourceSpec,
   )
@@ -149,7 +150,15 @@ parseProof = do
   return $ lhs `Proves` rhs
 
 parsePattern :: Parser Pattern
-parsePattern = PatternBinding <$> identifier
+parsePattern =
+  PatternTuple <$> try (sepBy2 patternTerm $ symbol "+")
+    <|> patternTerm
+
+patternTerm :: Parser Pattern
+patternTerm =
+  parens parsePattern
+    <|> (symbol "0" >> return PatternUnit)
+    <|> PatternBinding <$> identifier
 
 expr :: Parser Expr
 expr = ExprVariable <$> identifier
