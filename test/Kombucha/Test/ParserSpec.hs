@@ -56,6 +56,89 @@ spec = describe "parser" $ do
     resourceSpec' `shouldFailOn` "resource resource;"
     resourceSpec' `shouldFailOn` "resource;"
 
+  it "parses resources" $ do
+    let resource' = parse resource ""
+
+    resource' "A" `shouldParse` ResourceVariable 'A'
+    resource' "a" `shouldParse` ResourceVariable 'a'
+
+    resource' "qbit" `shouldParse` ResourceAtom "qbit" []
+    resource' "qbit X" `shouldParse` ResourceAtom "qbit" [ParamVariable 'X']
+    resource' "qbit X Y" `shouldParse` ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
+    resource' "qbit Alice Y" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamVariable 'Y']
+    resource' "qbit Alice Bob" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamValue "Bob"]
+
+    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [])
+    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [])
+
+    resource' "A + B + C"
+      `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [ResourceVariable 'C'])
+
+    resource' "(A + B) + C"
+      `shouldParse` ResourceTuple
+        ( TwoOrMore
+            (ResourceTuple $ TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [])
+            (ResourceVariable 'C')
+            []
+        )
+
+    resource' "(qbit X Y + qbit X Y) + qbit X Y"
+      `shouldParse` ResourceTuple
+        ( TwoOrMore
+            ( ResourceTuple $
+                TwoOrMore
+                  (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                  (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                  []
+            )
+            (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+            []
+        )
+
+    resource' "5 A"
+      `shouldParse` ResourceTuple
+        ( TwoOrMore
+            (ResourceVariable 'A')
+            (ResourceVariable 'A')
+            [ResourceVariable 'A', ResourceVariable 'A', ResourceVariable 'A']
+        )
+
+    resource' "2 qbit X Y"
+      `shouldParse` ResourceTuple
+        ( TwoOrMore
+            (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+            (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+            []
+        )
+
+    resource' "2 A + 3 A"
+      `shouldParse` ResourceTuple
+        ( TwoOrMore
+            (ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'A') []))
+            (ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'A') [ResourceVariable 'A']))
+            []
+        )
+
+    resource' "2 qbit X Y + 3 qbit X Y"
+      `shouldParse` ResourceTuple
+        ( TwoOrMore
+            ( ResourceTuple
+                ( TwoOrMore
+                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                    []
+                )
+            )
+            ( ResourceTuple
+                ( TwoOrMore
+                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                    [ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']]
+                )
+            )
+            []
+        )
+
   it "parses axioms" $ do
     let axiom' = parse axiom ""
 

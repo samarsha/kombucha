@@ -2,6 +2,7 @@ module Kombucha.Parser
   ( axiom,
     claim,
     paramSpec,
+    resource,
     resourceSpec,
   )
 where
@@ -47,6 +48,9 @@ lexeme = Token.lexeme tokenParser
 
 semi :: Parser ()
 semi = void $ Token.semi tokenParser
+
+parens :: Parser a -> Parser a
+parens = Token.parens tokenParser
 
 singleLetter :: Parser Char
 singleLetter = lexeme $ do
@@ -106,7 +110,15 @@ parseInference = do
   return $ lhs `Infers` rhs
 
 resource :: Parser Resource
-resource = ResourceAtom <$> identifier <*> many param
+resource =
+  (ResourceTuple <$> try (sepBy2 resourceTerm $ symbol "+"))
+    <|> resourceTerm
+
+resourceTerm :: Parser Resource
+resourceTerm =
+  (ResourceVariable <$> try singleLetter)
+    <|> (ResourceAtom <$> identifier <*> many param)
+    <|> parens resource
 
 param :: Parser Param
 param = (ParamVariable <$> try singleLetter) <|> (ParamValue <$> identifier)
