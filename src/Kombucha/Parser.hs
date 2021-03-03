@@ -6,6 +6,7 @@ module Kombucha.Parser
   )
 where
 
+import Control.Monad
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
 import Text.Parsec
@@ -38,11 +39,14 @@ reserved = Token.reserved tokenParser
 identifier :: Parser String
 identifier = Token.identifier tokenParser
 
-symbol :: String -> Parser String
-symbol = Token.symbol tokenParser
+symbol :: String -> Parser ()
+symbol = void . Token.symbol tokenParser
 
 lexeme :: Parser a -> Parser a
 lexeme = Token.lexeme tokenParser
+
+semi :: Parser ()
+semi = void $ Token.semi tokenParser
 
 singleLetter :: Parser Char
 singleLetter = lexeme $ do
@@ -50,10 +54,10 @@ singleLetter = lexeme $ do
   notFollowedBy $ Token.identLetter languageDef
   return l
 
-sepBy2 :: Parser a -> Parser sep -> Parser (TwoOrMore a)
+sepBy2 :: Parser a -> Parser () -> Parser (TwoOrMore a)
 sepBy2 p sep = do
   first <- p
-  _ <- sep
+  sep
   second <- p
   rest <- many $ sep >> p
   return $ TwoOrMore first second rest
@@ -62,8 +66,9 @@ parameterSpec :: Parser ParameterSpec
 parameterSpec = do
   reserved "parameter"
   name <- identifier
-  _ <- symbol "="
+  symbol "="
   values <- sepBy2 identifier $ symbol "|"
+  semi
   return ParameterSpec {name, values}
 
 resourceSpec :: Parser ResourceSpec
@@ -71,31 +76,32 @@ resourceSpec = do
   reserved "resource"
   name <- identifier
   parameters <- many identifier
+  semi
   return ResourceSpec {name, parameters}
 
 axiom :: Parser Axiom
 axiom = do
   reserved "axiom"
   name <- identifier
-  _ <- symbol ":"
+  symbol ":"
   inference' <- Kombucha.Parser.inference
+  semi
   return Axiom {name, inference = inference'}
 
 claim :: Parser Claim
 claim = do
   reserved "claim"
   name <- identifier
-  _ <- symbol ":"
+  symbol ":"
   inference' <- Kombucha.Parser.inference
-  -- TODO: Require newline.
-  -- _ <- newline
+  semi
   proof' <- Kombucha.Parser.proof
   return Claim {name, inference = inference', proof = proof'}
 
 inference :: Parser Inference
 inference = do
   lhs <- resource
-  _ <- symbol "|-"
+  symbol "|-"
   rhs <- resource
   return Inference {lhs, rhs}
 
@@ -109,8 +115,9 @@ proof :: Parser Proof
 proof = do
   reserved "proof"
   input <- patternParser
-  _ <- symbol "->"
+  symbol "->"
   output <- expr
+  semi
   return Proof {input, output}
 
 patternParser :: Parser Pattern
