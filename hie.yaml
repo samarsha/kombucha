@@ -1,0 +1,13 @@
+cradle:
+  stack:
+  - path: ./src
+    component: kombucha:lib
+
+  - path: ./app/Main.hs
+    component: kombucha:exe:kombucha
+
+  - path: ./app/Paths_kombucha.hs
+    component: kombucha:exe:kombucha
+
+  - path: ./test
+    component: kombucha:test:kombucha-test
