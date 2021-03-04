@@ -26,6 +26,7 @@ type Infer a =
 newtype InferState = InferState {count :: Int}
 
 data Constraint = Type :~ Type
+  deriving (Show)
 
 type Env = Map Name (Scheme Type)
 
@@ -33,11 +34,13 @@ data TypeError
   = UnificationFail Type Type
   | UnboundVariable Name
   | TypeKindMismatch Type TypeKind
+  deriving (Show)
 
 data TypeKind
   = KindInference
   | KindResource
   | KindParam
+  deriving (Show)
 
 type Subst = Map Name Type
 
@@ -69,7 +72,7 @@ instance Substitutable Param where
       Just (TypeParam param') -> param'
       _ -> param
 
-runInfer :: Env -> Infer Type -> Either TypeError (Type, [Constraint])
+runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
 runInfer env m = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
 
 inferExpr :: Expr -> Infer (Type, Env)

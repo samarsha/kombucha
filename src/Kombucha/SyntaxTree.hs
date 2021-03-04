@@ -101,6 +101,7 @@ data Type
   | TypeResource Resource
   | TypeParam Param
   | TypeVariable Name
+  deriving (Show)
 
 inferenceScheme :: Inference -> Scheme Inference
 inferenceScheme inference@(lhs `Infers` rhs) = ForAll (nub variables) inference
