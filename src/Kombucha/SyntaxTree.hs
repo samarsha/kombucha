@@ -1,5 +1,6 @@
 module Kombucha.SyntaxTree where
 
+import Data.List.NonEmpty
 import Kombucha.TwoOrMore
 
 data Declaration
@@ -65,7 +66,7 @@ data Expr
   | ExprTuple (TwoOrMore Expr)
   | ExprLet Pattern Expr
   | ExprApply String Expr
-  | ExprBlock [Expr]
+  | ExprBlock (NonEmpty Expr)
   deriving (Eq, Show)
 
 data Type

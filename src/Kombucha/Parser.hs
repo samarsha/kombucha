@@ -1,14 +1,16 @@
 module Kombucha.Parser
   ( axiom,
     claim,
+    expr,
     paramSpec,
-    parsePattern,
+    pattern,
     resource,
     resourceSpec,
   )
 where
 
 import Control.Monad
+import Data.List.NonEmpty
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
 import Text.Parsec
@@ -30,7 +32,7 @@ languageDef =
       identLetter = alphaNum <|> char '_',
       opStart = parserZero,
       opLetter = parserZero,
-      reservedNames = ["axiom", "claim", "parameter", "proof", "resource"],
+      reservedNames = ["axiom", "claim", "let", "parameter", "proof", "resource"],
       reservedOpNames = [],
       caseSensitive = True
     }
@@ -52,6 +54,9 @@ semi = void $ Token.semi tokenParser
 
 parens :: Parser a -> Parser a
 parens = Token.parens tokenParser
+
+braces :: Parser a -> Parser a
+braces = Token.braces tokenParser
 
 natural :: Parser Integer
 natural = Token.natural tokenParser
@@ -143,22 +148,45 @@ param =
 parseProof :: Parser Proof
 parseProof = do
   reserved "proof"
-  lhs <- parsePattern
+  lhs <- pattern
   symbol "->"
   rhs <- expr
   semi
   return $ lhs `Proves` rhs
 
-parsePattern :: Parser Pattern
-parsePattern =
+pattern :: Parser Pattern
+pattern =
   PatternTuple <$> try (sepBy2 patternTerm $ symbol "+")
     <|> patternTerm
 
 patternTerm :: Parser Pattern
 patternTerm =
-  parens parsePattern
+  parens pattern
     <|> (symbol "0" >> return PatternUnit)
     <|> PatternBind <$> identifier
 
 expr :: Parser Expr
-expr = ExprVariable <$> identifier
+expr =
+  exprLet
+    <|> ExprTuple <$> try (sepBy2 exprTerm $ symbol "+")
+    <|> exprTerm
+
+exprTerm :: Parser Expr
+exprTerm =
+  parens expr
+    <|> braces (ExprBlock . fromList <$> sepBy1 expr semi)
+    <|> (symbol "0" >> return ExprUnit)
+    <|> exprApplyOrVariable
+
+exprLet :: Parser Expr
+exprLet = do
+  reserved "let"
+  p <- pattern
+  symbol "="
+  ExprLet p <$> expr
+
+exprApplyOrVariable :: Parser Expr
+exprApplyOrVariable = do
+  name <- identifier
+  arg <- optionMaybe exprTerm
+  return $ maybe (ExprVariable name) (ExprApply name) arg

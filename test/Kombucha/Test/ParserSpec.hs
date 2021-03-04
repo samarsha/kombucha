@@ -1,5 +1,6 @@
 module Kombucha.Test.ParserSpec where
 
+import Data.List.NonEmpty
 import Kombucha.Parser
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
@@ -192,7 +193,7 @@ spec = describe "parser" $ do
     claim' `shouldFailOn` "claim proof: qbit X Y |- qbit X Y;"
 
   it "parses patterns" $ do
-    let pattern' = parse parsePattern ""
+    let pattern' = parse pattern ""
 
     pattern' "0" `shouldParse` PatternUnit
     pattern' "a" `shouldParse` PatternBind "a"
@@ -214,3 +215,53 @@ spec = describe "parser" $ do
             (PatternTuple $ TwoOrMore (PatternBind "b1") (PatternBind "b2") [PatternBind "b3"])
             []
         )
+
+  it "parses expressions" $ do
+    let expr' = parse expr ""
+
+    expr' "0" `shouldParse` ExprUnit
+    expr' "a" `shouldParse` ExprVariable "a"
+
+    expr' "a + (b + c)"
+      `shouldParse` ExprTuple
+        ( TwoOrMore
+            (ExprVariable "a")
+            (ExprTuple (TwoOrMore (ExprVariable "b") (ExprVariable "c") []))
+            []
+        )
+
+    expr' "{ let result = b + a; result }"
+      `shouldParse` ExprBlock
+        ( ExprLet (PatternBind "result") (ExprTuple $ TwoOrMore (ExprVariable "b") (ExprVariable "a") [])
+            :| [ExprVariable "result"]
+        )
+
+    expr' "a1 + a2 + b1 + b2 + b3"
+      `shouldParse` ExprTuple
+        (TwoOrMore (ExprVariable "a1") (ExprVariable "a2") [ExprVariable "b1", ExprVariable "b2", ExprVariable "b3"])
+
+    expr' "{ let q2 = identity_qbit q; q2 }"
+      `shouldParse` ExprBlock
+        ( ExprLet (PatternBind "q2") (ExprApply "identity_qbit" $ ExprVariable "q")
+            :| [ExprVariable "q2"]
+        )
+
+    expr' "{ let q2 = { let q3 = identity_qbit q; let q4 = identity_qbit q3; identity_qbit q4 }; q2 }"
+      `shouldParse` ExprBlock
+        ( ExprLet
+            (PatternBind "q2")
+            ( ExprBlock
+                ( ExprLet (PatternBind "q3") (ExprApply "identity_qbit" $ ExprVariable "q")
+                    :| [ ExprLet (PatternBind "q4") (ExprApply "identity_qbit" (ExprVariable "q3")),
+                         ExprApply "identity_qbit" (ExprVariable "q4")
+                       ]
+                )
+            )
+            :| [ExprVariable "q2"]
+        )
+
+    expr' `shouldFailOn` "1"
+    expr' `shouldFailOn` "{"
+    expr' `shouldFailOn` "{ }"
+    expr' `shouldFailOn` "{ let result = b + a; result "
+    expr' `shouldFailOn` "{ let result = b + a; result; }"
