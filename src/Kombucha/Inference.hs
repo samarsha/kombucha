@@ -97,7 +97,8 @@ inferExpr expr = case expr of
   ExprBlock exprs -> do
     env <- ask
     env' <- foldM foldBlock env $ NonEmpty.init exprs
-    local (const env') $ inferExpr $ NonEmpty.last exprs
+    t <- fmap fst $ local (const env') $ inferExpr $ NonEmpty.last exprs
+    return (t, env)
   where
     foldBlock env blockExpr = do
       (t, env') <- local (const env) $ inferExpr blockExpr
