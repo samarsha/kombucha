@@ -240,6 +240,8 @@ spec = describe "parser" $ do
       `shouldParse` ExprTuple
         (TwoOrMore (ExprVariable "a1") (ExprVariable "a2") [ExprVariable "b1", ExprVariable "b2", ExprVariable "b3"])
 
+    expr' "{ a }" `shouldParse` ExprBlock (ExprVariable "a" :| [])
+
     expr' "{ let q2 = identity_qbit q; q2 }"
       `shouldParse` ExprBlock
         ( ExprLet (PatternBind "q2") (ExprApply "identity_qbit" $ ExprVariable "q")
@@ -265,3 +267,4 @@ spec = describe "parser" $ do
     expr' `shouldFailOn` "{ }"
     expr' `shouldFailOn` "{ let result = b + a; result "
     expr' `shouldFailOn` "{ let result = b + a; result; }"
+    expr' `shouldFailOn` "{ let q2 = { let q3 = identity_qbit q; identity_qbit q3 } q2 }"
