@@ -12,40 +12,40 @@ data Declaration
   | DeclareClaim Claim
   deriving (Eq, Show)
 
-type Variable = Char
+type Name = String
 
 data Param
-  = ParamValue String
-  | ParamVariable Variable
+  = ParamValue Name
+  | ParamVariable Name
   deriving (Eq, Show)
 
 data ParamSpec = ParamSpec
-  { name :: String,
-    values :: TwoOrMore String
+  { name :: Name,
+    values :: TwoOrMore Name
   }
   deriving (Eq, Show)
 
 data Resource
   = ResourceUnit
-  | ResourceAtom String [Param]
+  | ResourceAtom Name [Param]
   | ResourceTuple (TwoOrMore Resource)
-  | ResourceVariable Variable
+  | ResourceVariable Name
   deriving (Eq, Show)
 
 data ResourceSpec = ResourceSpec
-  { name :: String,
-    parameters :: [String]
+  { name :: Name,
+    parameters :: [Name]
   }
   deriving (Eq, Show)
 
 data Axiom = Axiom
-  { name :: String,
+  { name :: Name,
     inference :: Inference
   }
   deriving (Eq, Show)
 
 data Claim = Claim
-  { name :: String,
+  { name :: Name,
     inference :: Inference,
     proof :: Proof
   }
@@ -59,16 +59,16 @@ data Proof = Pattern `Proves` Expr
 
 data Pattern
   = PatternUnit
-  | PatternBind String
+  | PatternBind Name
   | PatternTuple (TwoOrMore Pattern)
   deriving (Eq, Show)
 
 data Expr
   = ExprUnit
-  | ExprVariable String
+  | ExprVariable Name
   | ExprTuple (TwoOrMore Expr)
   | ExprLet Pattern Expr
-  | ExprApply String Expr
+  | ExprApply Name Expr
   | ExprBlock (NonEmpty Expr)
   deriving (Eq, Show)
 
@@ -76,4 +76,4 @@ data Type
   = TypeInference Inference
   | TypeResource Resource
   | TypeParam Param
-  | TypeVariable Variable
+  | TypeVariable Name

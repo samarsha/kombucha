@@ -60,28 +60,28 @@ spec = describe "parser" $ do
   it "parses resources" $ do
     let resource' = parse resource ""
 
-    resource' "A" `shouldParse` ResourceVariable 'A'
-    resource' "(A)" `shouldParse` ResourceVariable 'A'
-    resource' "a" `shouldParse` ResourceVariable 'a'
-    resource' "(a)" `shouldParse` ResourceVariable 'a'
+    resource' "A" `shouldParse` ResourceVariable "A"
+    resource' "(A)" `shouldParse` ResourceVariable "A"
+    resource' "a" `shouldParse` ResourceVariable "a"
+    resource' "(a)" `shouldParse` ResourceVariable "a"
 
     resource' "qbit" `shouldParse` ResourceAtom "qbit" []
-    resource' "qbit X" `shouldParse` ResourceAtom "qbit" [ParamVariable 'X']
-    resource' "qbit X Y" `shouldParse` ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
-    resource' "qbit Alice Y" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamVariable 'Y']
+    resource' "qbit X" `shouldParse` ResourceAtom "qbit" [ParamVariable "X"]
+    resource' "qbit X Y" `shouldParse` ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
+    resource' "qbit Alice Y" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamVariable "Y"]
     resource' "qbit Alice Bob" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamValue "Bob"]
 
-    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [])
-    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [])
+    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [])
+    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [])
 
     resource' "A + B + C"
-      `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [ResourceVariable 'C'])
+      `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [ResourceVariable "C"])
 
     resource' "(A + B) + C"
       `shouldParse` ResourceTuple
         ( TwoOrMore
-            (ResourceTuple $ TwoOrMore (ResourceVariable 'A') (ResourceVariable 'B') [])
-            (ResourceVariable 'C')
+            (ResourceTuple $ TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [])
+            (ResourceVariable "C")
             []
         )
 
@@ -90,11 +90,11 @@ spec = describe "parser" $ do
         ( TwoOrMore
             ( ResourceTuple $
                 TwoOrMore
-                  (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
-                  (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                  (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
+                  (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
                   []
             )
-            (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+            (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
             []
         )
 
@@ -104,24 +104,24 @@ spec = describe "parser" $ do
     resource' "5 A"
       `shouldParse` ResourceTuple
         ( TwoOrMore
-            (ResourceVariable 'A')
-            (ResourceVariable 'A')
-            [ResourceVariable 'A', ResourceVariable 'A', ResourceVariable 'A']
+            (ResourceVariable "A")
+            (ResourceVariable "A")
+            [ResourceVariable "A", ResourceVariable "A", ResourceVariable "A"]
         )
 
     resource' "2 qbit X Y"
       `shouldParse` ResourceTuple
         ( TwoOrMore
-            (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
-            (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+            (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
+            (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
             []
         )
 
     resource' "2 A + 3 B"
       `shouldParse` ResourceTuple
         ( TwoOrMore
-            (ResourceTuple (TwoOrMore (ResourceVariable 'A') (ResourceVariable 'A') []))
-            (ResourceTuple (TwoOrMore (ResourceVariable 'B') (ResourceVariable 'B') [ResourceVariable 'B']))
+            (ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "A") []))
+            (ResourceTuple (TwoOrMore (ResourceVariable "B") (ResourceVariable "B") [ResourceVariable "B"]))
             []
         )
 
@@ -130,16 +130,16 @@ spec = describe "parser" $ do
         ( TwoOrMore
             ( ResourceTuple
                 ( TwoOrMore
-                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
-                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
+                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
+                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
                     []
                 )
             )
             ( ResourceTuple
                 ( TwoOrMore
-                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
-                    (ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'])
-                    [ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']]
+                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
+                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
+                    [ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]]
                 )
             )
             []
@@ -152,16 +152,16 @@ spec = describe "parser" $ do
       `shouldParse` Axiom
         { name = "qbit_to_ebit",
           inference =
-            ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
-              `Infers` ResourceAtom "ebit" [ParamVariable 'X', ParamVariable 'Y']
+            ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
+              `Infers` ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
         }
 
     axiom' "axiom flip_ebit: ebit X Y |- ebit Y X;"
       `shouldParse` Axiom
         { name = "flip_ebit",
           inference =
-            ResourceAtom "ebit" [ParamVariable 'X', ParamVariable 'Y']
-              `Infers` ResourceAtom "ebit" [ParamVariable 'Y', ParamVariable 'X']
+            ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
+              `Infers` ResourceAtom "ebit" [ParamVariable "Y", ParamVariable "X"]
         }
 
     axiom' `shouldFailOn` "axiom qbit_to_ebit: qbit X Y |- ebit X Y"
@@ -178,8 +178,8 @@ spec = describe "parser" $ do
       `shouldParse` Claim
         { name = "identity_qbit",
           inference =
-            ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y']
-              `Infers` ResourceAtom "qbit" [ParamVariable 'X', ParamVariable 'Y'],
+            ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
+              `Infers` ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"],
           proof = PatternBind "q" `Proves` ExprVariable "q"
         }
 

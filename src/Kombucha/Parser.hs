@@ -62,11 +62,11 @@ braces = Token.braces tokenParser
 natural :: Parser Integer
 natural = Token.natural tokenParser
 
-variable :: Parser Variable
+variable :: Parser Name
 variable = lexeme $ do
   l <- letter
   notFollowedBy $ Token.identLetter languageDef
-  return l
+  return [l]
 
 sepBy2 :: Parser a -> Parser () -> Parser (TwoOrMore a)
 sepBy2 p sep = do
