@@ -31,15 +31,8 @@ data Constraint = Type :~ Type
 type Env = Map Name (Scheme Type)
 
 data TypeError
-  = UnificationFail Type Type
+  = TypeMismatch Type Type
   | UnboundVariable Name
-  | TypeKindMismatch Type TypeKind
-  deriving (Show)
-
-data TypeKind
-  = KindInference
-  | KindResource
-  | KindParam
   deriving (Show)
 
 type Subst = Map Name Type
