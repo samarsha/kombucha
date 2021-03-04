@@ -59,19 +59,13 @@ data Pattern
   | PatternTuple (TwoOrMore Pattern)
   deriving (Eq, Show)
 
-data Let = Let
-  { pattern :: Pattern,
-    value :: Expr,
-    result :: Expr
-  }
-  deriving (Eq, Show)
-
 data Expr
   = ExprUnit
   | ExprVariable String
   | ExprTuple (TwoOrMore Expr)
-  | ExprLet Let
+  | ExprLet Pattern Expr
   | ExprApply String Expr
+  | ExprBlock [Expr]
   deriving (Eq, Show)
 
 data Type
