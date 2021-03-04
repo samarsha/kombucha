@@ -1,7 +1,27 @@
-module Kombucha.SyntaxTree where
+module Kombucha.SyntaxTree
+  ( Axiom (..),
+    Claim (..),
+    Declaration (..),
+    Document,
+    Expr (..),
+    Inference (..),
+    Name,
+    Param (..),
+    ParamSpec (..),
+    Pattern (..),
+    Proof (..),
+    Resource (..),
+    ResourceSpec (..),
+    Scheme (..),
+    inferenceScheme,
+  )
+where
 
-import Data.List.NonEmpty
-import Kombucha.TwoOrMore
+import Data.List
+import Data.List.NonEmpty (NonEmpty)
+import Data.Maybe
+import Kombucha.TwoOrMore (TwoOrMore)
+import qualified Kombucha.TwoOrMore as TwoOrMore
 
 type Document = [Declaration]
 
@@ -13,6 +33,9 @@ data Declaration
   deriving (Eq, Show)
 
 type Name = String
+
+data Scheme a = ForAll [Name] a
+  deriving (Eq, Show)
 
 data Param
   = ParamValue Name
@@ -40,13 +63,13 @@ data ResourceSpec = ResourceSpec
 
 data Axiom = Axiom
   { name :: Name,
-    inference :: Inference
+    inference :: Scheme Inference
   }
   deriving (Eq, Show)
 
 data Claim = Claim
   { name :: Name,
-    inference :: Inference,
+    inference :: Scheme Inference,
     proof :: Proof
   }
   deriving (Eq, Show)
@@ -77,3 +100,19 @@ data Type
   | TypeResource Resource
   | TypeParam Param
   | TypeVariable Name
+
+inferenceScheme :: Inference -> Scheme Inference
+inferenceScheme inference@(lhs `Infers` rhs) = ForAll (nub variables) inference
+  where
+    variables = resourceVariables lhs ++ resourceVariables rhs
+
+resourceVariables :: Resource -> [Name]
+resourceVariables resource = case resource of
+  ResourceUnit -> []
+  ResourceAtom _ params -> mapMaybe paramVariable params
+  ResourceTuple resources -> TwoOrMore.toList resources >>= resourceVariables
+  ResourceVariable name -> [name]
+
+paramVariable :: Param -> Maybe Name
+paramVariable (ParamVariable name) = Just name
+paramVariable (ParamValue _) = Nothing

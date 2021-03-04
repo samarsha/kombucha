@@ -108,7 +108,7 @@ axiom = do
   reserved "axiom"
   name <- identifier
   symbol ":"
-  inference <- parseInference
+  inference <- inferenceScheme <$> parseInference
   semi
   return Axiom {name, inference}
 
@@ -117,7 +117,7 @@ claim = do
   reserved "claim"
   name <- identifier
   symbol ":"
-  inference <- parseInference
+  inference <- inferenceScheme <$> parseInference
   semi
   proof <- parseProof
   return Claim {name, inference, proof}

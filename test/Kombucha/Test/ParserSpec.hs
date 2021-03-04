@@ -152,16 +152,18 @@ spec = describe "parser" $ do
       `shouldParse` Axiom
         { name = "qbit_to_ebit",
           inference =
-            ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-              `Infers` ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
+            ForAll ["X", "Y"] $
+              ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
+                `Infers` ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
         }
 
     axiom' "axiom flip_ebit: ebit X Y |- ebit Y X;"
       `shouldParse` Axiom
         { name = "flip_ebit",
           inference =
-            ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
-              `Infers` ResourceAtom "ebit" [ParamVariable "Y", ParamVariable "X"]
+            ForAll ["X", "Y"] $
+              ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
+                `Infers` ResourceAtom "ebit" [ParamVariable "Y", ParamVariable "X"]
         }
 
     axiom' `shouldFailOn` "axiom qbit_to_ebit: qbit X Y |- ebit X Y"
@@ -178,8 +180,9 @@ spec = describe "parser" $ do
       `shouldParse` Claim
         { name = "identity_qbit",
           inference =
-            ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-              `Infers` ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"],
+            ForAll ["X", "Y"] $
+              ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
+                `Infers` ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"],
           proof = PatternBind "q" `Proves` ExprVariable "q"
         }
 
