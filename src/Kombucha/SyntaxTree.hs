@@ -3,11 +3,14 @@ module Kombucha.SyntaxTree where
 import Data.List.NonEmpty
 import Kombucha.TwoOrMore
 
+type Document = [Declaration]
+
 data Declaration
   = DeclareParam ParamSpec
   | DeclareResource ResourceSpec
   | DeclareAxiom Axiom
   | DeclareClaim Claim
+  deriving (Eq, Show)
 
 type Variable = Char
 

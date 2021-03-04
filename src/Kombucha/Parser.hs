@@ -1,6 +1,7 @@
 module Kombucha.Parser
   ( axiom,
     claim,
+    document,
     expr,
     paramSpec,
     pattern,
@@ -74,6 +75,16 @@ sepBy2 p sep = do
   second <- p
   rest <- many $ sep >> p
   return $ TwoOrMore first second rest
+
+document :: Parser Document
+document = many declaration
+
+declaration :: Parser Declaration
+declaration =
+  DeclareParam <$> paramSpec
+    <|> DeclareResource <$> resourceSpec
+    <|> DeclareAxiom <$> axiom
+    <|> DeclareClaim <$> claim
 
 paramSpec :: Parser ParamSpec
 paramSpec = do

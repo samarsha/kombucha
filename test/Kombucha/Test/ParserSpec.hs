@@ -268,3 +268,16 @@ spec = describe "parser" $ do
     expr' `shouldFailOn` "{ let result = b + a; result "
     expr' `shouldFailOn` "{ let result = b + a; result; }"
     expr' `shouldFailOn` "{ let q2 = { let q3 = identity_qbit q; identity_qbit q3 } q2 }"
+
+  it "parses documents" $ do
+    let document' = parse document ""
+
+    document' "" `shouldParse` []
+    document' "resource foo;" `shouldParse` [DeclareResource $ ResourceSpec {name = "foo", parameters = []}]
+
+    document' "parameter Party = Alice | Bob; resource qbit Party Party;"
+      `shouldParse` [ DeclareParam $ ParamSpec {name = "Party", values = TwoOrMore "Alice" "Bob" []},
+                      DeclareResource $ ResourceSpec {name = "qbit", parameters = ["Party", "Party"]}
+                    ]
+
+    document' `shouldFailOn` "resource foo"
