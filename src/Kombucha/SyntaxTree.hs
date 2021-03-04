@@ -13,6 +13,7 @@ module Kombucha.SyntaxTree
     Resource (..),
     ResourceSpec (..),
     Scheme (..),
+    Type (..),
     inferenceScheme,
   )
 where

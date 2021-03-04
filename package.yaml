@@ -3,7 +3,9 @@ version: 0.1.0.0
 
 dependencies:
 - base
+- containers
 - parsec
+- transformers
 
 library:
   source-dirs: src
