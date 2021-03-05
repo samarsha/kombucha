@@ -154,4 +154,6 @@ putState :: InferState -> Infer ()
 putState = Infer . lift . lift . put
 
 constrain :: Constraint -> Infer ()
-constrain = Infer . lift . tell . return
+constrain c@(lhs :~ rhs)
+  | lhs /= rhs = Infer . lift $ tell [c]
+  | otherwise = return ()
