@@ -1,9 +1,7 @@
 module Kombucha.Inference
-  ( Constraint (..),
-    Infer,
-    inferExpr,
-    runInfer,
-    runSolve,
+  ( Env,
+    TypeError (..),
+    typeExpr,
   )
 where
 
@@ -39,7 +37,7 @@ data TypeError
   | ArityMismatch [Type] [Type]
   | InfiniteType Name Type
   | UnboundVariable Name
-  deriving (Show)
+  deriving (Eq, Show)
 
 type Subst = Map Name Type
 
@@ -95,6 +93,12 @@ instance Substitutable Param where
 
   freeVariables (ParamValue _) = Set.empty
   freeVariables (ParamVariable name) = Set.singleton name
+
+typeExpr :: Env -> Expr -> Either TypeError Type
+typeExpr env expr = do
+  ((t, _), constraints) <- runInfer env $ inferExpr expr
+  subst <- runSolve constraints
+  return $ apply subst t
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
 runInfer env (Infer m) = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
