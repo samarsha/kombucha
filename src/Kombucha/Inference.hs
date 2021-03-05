@@ -63,29 +63,28 @@ runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
 runInfer env (Infer m) = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
 
 inferExpr :: Expr -> Infer (Type, Env)
-inferExpr expr = case expr of
-  ExprUnit -> passEnv $ TypeResource ResourceUnit
-  ExprVariable name -> lookupEnv name >>= passEnv
-  ExprTuple exprs -> do
-    types <- fmap fst <$> mapM inferExpr exprs
-    resources <- mapM resourceType types
-    passEnv $ TypeResource $ ResourceTuple resources
-  ExprLet pattern letExpr -> do
-    (resource, env) <- inferPattern pattern
-    exprType <- fst <$> inferExpr letExpr
-    constrain $ TypeResource resource :~ exprType
-    return (TypeResource ResourceUnit, env)
-  ExprApply name arg -> do
-    nameType <- lookupEnv name
-    argType <- inferExpr arg >>= resourceType . fst
-    valueType <- ResourceVariable <$> fresh
-    constrain $ nameType :~ TypeInference (argType `Infers` valueType)
-    passEnv $ TypeResource valueType
-  ExprBlock exprs -> do
-    env <- getEnv
-    env' <- foldM foldBlock env $ NonEmpty.init exprs
-    t <- fmap fst $ withEnv env' $ inferExpr $ NonEmpty.last exprs
-    return (t, env)
+inferExpr ExprUnit = passEnv $ TypeResource ResourceUnit
+inferExpr (ExprVariable name) = lookupEnv name >>= passEnv
+inferExpr (ExprTuple exprs) = do
+  types <- fmap fst <$> mapM inferExpr exprs
+  resources <- mapM resourceType types
+  passEnv $ TypeResource $ ResourceTuple resources
+inferExpr (ExprLet pattern expr) = do
+  (resource, env) <- inferPattern pattern
+  exprType <- fst <$> inferExpr expr
+  constrain $ TypeResource resource :~ exprType
+  return (TypeResource ResourceUnit, env)
+inferExpr (ExprApply name arg) = do
+  nameType <- lookupEnv name
+  argType <- inferExpr arg >>= resourceType . fst
+  valueType <- ResourceVariable <$> fresh
+  constrain $ nameType :~ TypeInference (argType `Infers` valueType)
+  passEnv $ TypeResource valueType
+inferExpr (ExprBlock exprs) = do
+  env <- getEnv
+  env' <- foldM foldBlock env $ NonEmpty.init exprs
+  t <- fmap fst $ withEnv env' $ inferExpr $ NonEmpty.last exprs
+  return (t, env)
   where
     foldBlock env blockExpr = do
       (t, env') <- withEnv env $ inferExpr blockExpr
@@ -93,17 +92,16 @@ inferExpr expr = case expr of
       return env'
 
 inferPattern :: Pattern -> Infer (Resource, Env)
-inferPattern pattern = case pattern of
-  PatternUnit -> passEnv ResourceUnit
-  PatternBind name -> do
-    env <- getEnv
-    rv <- ResourceVariable <$> fresh
-    return (rv, Map.insert name (ForAll [] $ TypeResource rv) env)
-  PatternTuple patterns -> do
-    results <- mapM inferPattern patterns
-    let resources = fst <$> results
-    let env = foldl1 Map.union $ snd <$> results
-    return (ResourceTuple resources, env)
+inferPattern PatternUnit = passEnv ResourceUnit
+inferPattern (PatternBind name) = do
+  env <- getEnv
+  rv <- ResourceVariable <$> fresh
+  return (rv, Map.insert name (ForAll [] $ TypeResource rv) env)
+inferPattern (PatternTuple patterns) = do
+  results <- mapM inferPattern patterns
+  let resources = fst <$> results
+  let env = foldl1 Map.union $ snd <$> results
+  return (ResourceTuple resources, env)
 
 letters :: [String]
 letters = [1 ..] >>= flip replicateM ['a' .. 'z']
