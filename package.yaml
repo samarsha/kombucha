@@ -31,4 +31,5 @@ ghc-options:
 
 default-extensions:
 - DuplicateRecordFields
+- GeneralizedNewtypeDeriving
 - NamedFieldPuns

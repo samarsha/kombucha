@@ -1,4 +1,4 @@
-module Kombucha.Inference (inferExpr, runInfer) where
+module Kombucha.Inference (Infer, inferExpr, runInfer) where
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -11,17 +11,11 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Kombucha.SyntaxTree
 
-type Infer a =
-  ReaderT
-    Env
-    ( WriterT
-        [Constraint]
-        ( StateT
-            InferState
-            (Except TypeError)
-        )
-    )
-    a
+newtype Infer a
+  = Infer
+      ( ReaderT Env (WriterT [Constraint] (StateT InferState (Except TypeError))) a
+      )
+  deriving (Applicative, Functor, Monad)
 
 newtype InferState = InferState {count :: Int}
 
@@ -66,16 +60,16 @@ instance Substitutable Param where
       _ -> param
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
-runInfer env m = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
+runInfer env (Infer m) = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
 
 inferExpr :: Expr -> Infer (Type, Env)
 inferExpr expr = case expr of
-  ExprUnit -> preserveEnv $ TypeResource ResourceUnit
-  ExprVariable name -> lookupEnv name >>= preserveEnv
+  ExprUnit -> passEnv $ TypeResource ResourceUnit
+  ExprVariable name -> lookupEnv name >>= passEnv
   ExprTuple exprs -> do
     types <- fmap fst <$> mapM inferExpr exprs
     resources <- mapM resourceType types
-    preserveEnv $ TypeResource $ ResourceTuple resources
+    passEnv $ TypeResource $ ResourceTuple resources
   ExprLet pattern letExpr -> do
     (resource, env) <- inferPattern pattern
     exprType <- fst <$> inferExpr letExpr
@@ -86,23 +80,23 @@ inferExpr expr = case expr of
     argType <- inferExpr arg >>= resourceType . fst
     valueType <- ResourceVariable <$> fresh
     constrain $ nameType :~ TypeInference (argType `Infers` valueType)
-    preserveEnv $ TypeResource valueType
+    passEnv $ TypeResource valueType
   ExprBlock exprs -> do
-    env <- ask
+    env <- getEnv
     env' <- foldM foldBlock env $ NonEmpty.init exprs
-    t <- fmap fst $ local (const env') $ inferExpr $ NonEmpty.last exprs
+    t <- fmap fst $ withEnv env' $ inferExpr $ NonEmpty.last exprs
     return (t, env)
   where
     foldBlock env blockExpr = do
-      (t, env') <- local (const env) $ inferExpr blockExpr
+      (t, env') <- withEnv env $ inferExpr blockExpr
       constrain $ TypeResource ResourceUnit :~ t
       return env'
 
 inferPattern :: Pattern -> Infer (Resource, Env)
 inferPattern pattern = case pattern of
-  PatternUnit -> preserveEnv ResourceUnit
+  PatternUnit -> passEnv ResourceUnit
   PatternBind name -> do
-    env <- ask
+    env <- getEnv
     rv <- ResourceVariable <$> fresh
     return (rv, Map.insert name (ForAll [] $ TypeResource rv) env)
   PatternTuple patterns -> do
@@ -110,18 +104,6 @@ inferPattern pattern = case pattern of
     let resources = fst <$> results
     let env = foldl1 Map.union $ snd <$> results
     return (ResourceTuple resources, env)
-
-preserveEnv :: a -> Infer (a, Env)
-preserveEnv x = do
-  env <- ask
-  return (x, env)
-
-lookupEnv :: Name -> Infer Type
-lookupEnv name = do
-  env <- ask
-  case Map.lookup name env of
-    Just scheme -> instantiate scheme
-    Nothing -> throwError $ UnboundVariable name
 
 letters :: [String]
 letters = [1 ..] >>= flip replicateM ['a' .. 'z']
@@ -144,14 +126,32 @@ resourceType t = do
   constrain $ TypeResource rv :~ t
   return rv
 
+getEnv :: Infer Env
+getEnv = Infer ask
+
+withEnv :: Env -> Infer a -> Infer a
+withEnv env (Infer m) = Infer $ local (const env) m
+
+passEnv :: a -> Infer (a, Env)
+passEnv x = do
+  env <- getEnv
+  return (x, env)
+
+lookupEnv :: Name -> Infer Type
+lookupEnv name = do
+  env <- getEnv
+  case Map.lookup name env of
+    Just scheme -> instantiate scheme
+    Nothing -> throwError $ UnboundVariable name
+
 throwError :: TypeError -> Infer a
-throwError = lift . lift . lift . throwE
+throwError = Infer . lift . lift . lift . throwE
 
 getState :: Infer InferState
-getState = lift $ lift get
+getState = Infer . lift $ lift get
 
 putState :: InferState -> Infer ()
-putState = lift . lift . put
+putState = Infer . lift . lift . put
 
 constrain :: Constraint -> Infer ()
-constrain = lift . tell . return
+constrain = Infer . lift . tell . return
