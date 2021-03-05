@@ -1,4 +1,11 @@
-module Kombucha.Inference (Infer, inferExpr, runInfer) where
+module Kombucha.Inference
+  ( Constraint (..),
+    Infer,
+    inferExpr,
+    runInfer,
+    runSolve,
+  )
+where
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -9,7 +16,10 @@ import Control.Monad.Trans.Writer
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Kombucha.SyntaxTree
+import qualified Kombucha.TwoOrMore as TwoOrMore
 
 newtype Infer a
   = Infer
@@ -26,13 +36,26 @@ type Env = Map Name (Scheme Type)
 
 data TypeError
   = TypeMismatch Type Type
+  | ArityMismatch [Type] [Type]
+  | InfiniteType Name Type
   | UnboundVariable Name
   deriving (Show)
 
 type Subst = Map Name Type
 
+type Solve = Except TypeError
+
 class Substitutable a where
   apply :: Subst -> a -> a
+  freeVariables :: a -> Set Name
+
+instance Substitutable a => Substitutable [a] where
+  apply = map . apply
+  freeVariables = foldr (Set.union . freeVariables) Set.empty
+
+instance Substitutable Constraint where
+  apply subst (t1 :~ t2) = apply subst t1 :~ apply subst t2
+  freeVariables (t1 :~ t2) = freeVariables t1 `Set.union` freeVariables t2
 
 instance Substitutable Type where
   apply subst (TypeInference inference) = TypeInference $ apply subst inference
@@ -40,8 +63,14 @@ instance Substitutable Type where
   apply subst (TypeParam param) = TypeParam $ apply subst param
   apply subst t@(TypeVariable name) = Map.findWithDefault t name subst
 
+  freeVariables (TypeInference inference) = freeVariables inference
+  freeVariables (TypeResource resource) = freeVariables resource
+  freeVariables (TypeParam param) = freeVariables param
+  freeVariables (TypeVariable name) = Set.singleton name
+
 instance Substitutable Inference where
-  apply subst (lhs `Infers` rhs) = apply subst lhs `Infers` apply subst rhs
+  apply subst (r1 `Infers` r2) = apply subst r1 `Infers` apply subst r2
+  freeVariables (r1 `Infers` r2) = freeVariables r1 `Set.union` freeVariables r2
 
 instance Substitutable Resource where
   apply _ ResourceUnit = ResourceUnit
@@ -52,12 +81,20 @@ instance Substitutable Resource where
       Just (TypeResource resource') -> resource'
       _ -> resource
 
+  freeVariables ResourceUnit = Set.empty
+  freeVariables (ResourceAtom _ params) = freeVariables params
+  freeVariables (ResourceTuple rs) = freeVariables $ TwoOrMore.toList rs
+  freeVariables (ResourceVariable name) = Set.singleton name
+
 instance Substitutable Param where
   apply _ param@(ParamValue _) = param
   apply subst param@(ParamVariable name) =
     case Map.lookup name subst of
       Just (TypeParam param') -> param'
       _ -> param
+
+  freeVariables (ParamValue _) = Set.empty
+  freeVariables (ParamVariable name) = Set.singleton name
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
 runInfer env (Infer m) = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
@@ -152,6 +189,53 @@ putState :: InferState -> Infer ()
 putState = Infer . lift . lift . put
 
 constrain :: Constraint -> Infer ()
-constrain c@(lhs :~ rhs)
-  | lhs /= rhs = Infer . lift $ tell [c]
+constrain c@(t1 :~ t2)
+  | t1 /= t2 = Infer . lift $ tell [c]
   | otherwise = return ()
+
+unify :: Type -> Type -> Solve Subst
+unify t1 t2 | t1 == t2 = return Map.empty
+unify (TypeInference (r1 `Infers` r2)) (TypeInference (r3 `Infers` r4)) =
+  unifyZip [TypeResource r1, TypeResource r2] [TypeResource r3, TypeResource r4]
+unify (TypeResource (ResourceAtom name1 params1)) (TypeResource (ResourceAtom name2 params2))
+  | name1 == name2 = unifyZip (TypeParam <$> params1) (TypeParam <$> params2)
+unify (TypeResource (ResourceTuple rs1)) (TypeResource (ResourceTuple rs2)) =
+  unifyZip (TypeResource <$> TwoOrMore.toList rs1) (TypeResource <$> TwoOrMore.toList rs2)
+unify (TypeResource (ResourceVariable rv)) t@(TypeResource _) = rv `bind` t
+unify t@(TypeResource _) (TypeResource (ResourceVariable rv)) = rv `bind` t
+unify (TypeParam (ParamVariable pv)) t@(TypeParam _) = pv `bind` t
+unify t@(TypeParam _) (TypeParam (ParamVariable pv)) = pv `bind` t
+unify (TypeVariable tv) t = tv `bind` t
+unify t (TypeVariable tv) = tv `bind` t
+unify t1 t2 = throwE $ TypeMismatch t1 t2
+
+unifyZip :: [Type] -> [Type] -> Solve Subst
+unifyZip [] [] = return Map.empty
+unifyZip (t1 : ts1) (t2 : ts2) = do
+  subst1 <- unify t1 t2
+  subst2 <- unifyZip (apply subst1 ts1) (apply subst1 ts2)
+  return $ subst2 `compose` subst1
+unifyZip t1 t2 = throwE $ ArityMismatch t1 t2
+
+runSolve :: [Constraint] -> Either TypeError Subst
+runSolve constraints = runExcept $ solve (Map.empty, constraints)
+
+solve :: (Subst, [Constraint]) -> Solve Subst
+solve (subst, []) = return subst
+solve (subst, t1 :~ t2 : constraints) = do
+  subst' <- unify t1 t2
+  solve (subst' `compose` subst, apply subst' constraints)
+
+compose :: Subst -> Subst -> Subst
+s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
+
+bind :: Name -> Type -> Solve Subst
+name `bind` t
+  | t == TypeVariable name = return Map.empty
+  | t == TypeResource (ResourceVariable name) = return Map.empty
+  | t == TypeParam (ParamVariable name) = return Map.empty
+  | occursCheck name t = throwE $ InfiniteType name t
+  | otherwise = return $ Map.singleton name t
+
+occursCheck :: Substitutable a => Name -> a -> Bool
+occursCheck name s = name `Set.member` freeVariables s
