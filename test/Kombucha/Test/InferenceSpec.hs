@@ -60,6 +60,9 @@ spec = describe "type inference" $ do
     typeExpr' (ExprApply "baz" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Right (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
 
+    typeExpr' (ExprApply "baz" $ ExprApply "bar" $ ExprApply "baz" ExprUnit)
+      `shouldBe` Right (TypeResource $ ResourceVariable "i")
+
     typeExpr' (ExprApply "foo" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Left
         ( TypeMismatch
@@ -73,3 +76,30 @@ spec = describe "type inference" $ do
             (TypeResource ResourceUnit)
             (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
         )
+
+  it "checks claims" $ do
+    let checkClaim' = checkClaim mempty
+
+    checkClaim'
+      Claim
+        { name = "identity",
+          inference = ForAll ["A"] $ ResourceVariable "A" `Infers` ResourceVariable "A",
+          proof = PatternBind "x" `Proves` ExprVariable "x"
+        }
+      `shouldBe` Right ()
+
+    checkClaim'
+      Claim
+        { name = "fake_identity",
+          inference = ForAll ["A"] $ ResourceVariable "A" `Infers` ResourceVariable "A",
+          proof = PatternBind "x" `Proves` ExprUnit
+        }
+      `shouldBe` Left (TypeMismatch (TypeResource ResourceUnit) (TypeResource ResourceUnit))
+
+    checkClaim'
+      Claim
+        { name = "transmogrify",
+          inference = ForAll ["A", "B"] $ ResourceVariable "A" `Infers` ResourceVariable "B",
+          proof = PatternBind "x" `Proves` ExprVariable "x"
+        }
+      `shouldBe` Left (TypeMismatch (TypeResource ResourceUnit) (TypeResource ResourceUnit))

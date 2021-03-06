@@ -1,6 +1,7 @@
 module Kombucha.Inference
   ( Env,
     TypeError (..),
+    checkClaim,
     typeExpr,
   )
 where
@@ -36,6 +37,7 @@ data TypeError
   = TypeMismatch Type Type
   | ArityMismatch [Type] [Type]
   | InfiniteType Name Type
+  | ConstrainsVariable Name Type
   | UnboundVariable Name
   deriving (Eq, Show)
 
@@ -76,8 +78,10 @@ instance Substitutable Resource where
   apply subst (ResourceTuple resources) = ResourceTuple $ apply subst <$> resources
   apply subst resource@(ResourceVariable name) =
     case Map.lookup name subst of
+      Just (TypeVariable name') -> ResourceVariable name'
       Just (TypeResource resource') -> resource'
-      _ -> resource
+      Just _ -> error "Type kind can't be substituted here."
+      Nothing -> resource
 
   freeVariables ResourceUnit = Set.empty
   freeVariables (ResourceAtom _ params) = freeVariables params
@@ -88,11 +92,19 @@ instance Substitutable Param where
   apply _ param@(ParamValue _) = param
   apply subst param@(ParamVariable name) =
     case Map.lookup name subst of
+      Just (TypeVariable name') -> ParamVariable name'
       Just (TypeParam param') -> param'
-      _ -> param
+      Just _ -> error "Type kind can't be substituted here."
+      Nothing -> param
 
   freeVariables (ParamValue _) = Set.empty
   freeVariables (ParamVariable name) = Set.singleton name
+
+checkClaim :: Env -> Claim -> Either TypeError ()
+checkClaim env claim = do
+  -- TODO: Check that claim doesn't constrain type variables.
+  (_, constraints) <- runInfer env (inferClaim claim)
+  void $ runSolve constraints
 
 typeExpr :: Env -> Expr -> Either TypeError Type
 typeExpr env expr = do
@@ -101,7 +113,23 @@ typeExpr env expr = do
   return $ apply subst t
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
-runInfer env (Infer m) = runExcept $ evalStateT (runWriterT $ runReaderT m env) $ InferState {count = 0}
+runInfer env (Infer m) =
+  runExcept $
+    evalStateT (runWriterT $ runReaderT m env) $
+      InferState {count = 0}
+
+inferClaim :: Claim -> Infer Inference
+inferClaim Claim {inference = scheme, proof = pattern `Proves` expr} = do
+  (patternResource, env) <- inferPattern pattern
+  exprType <- fst <$> withEnv env (inferExpr expr)
+
+  let patternType = TypeResource patternResource
+  constrain $ patternType :~ exprType
+
+  inference@(input `Infers` output) <- instantiate scheme
+  constrain $ TypeResource input :~ patternType
+  constrain $ TypeResource output :~ exprType
+  return inference
 
 inferExpr :: Expr -> Infer (Type, Env)
 inferExpr ExprUnit = passEnv $ TypeResource ResourceUnit
@@ -118,9 +146,9 @@ inferExpr (ExprLet pattern expr) = do
 inferExpr (ExprApply name arg) = do
   nameType <- lookupEnv name
   argType <- inferExpr arg >>= resourceType . fst
-  valueType <- ResourceVariable <$> fresh
-  constrain $ nameType :~ TypeInference (argType `Infers` valueType)
-  passEnv $ TypeResource valueType
+  resultType <- ResourceVariable <$> fresh
+  constrain $ nameType :~ TypeInference (argType `Infers` resultType)
+  passEnv $ TypeResource resultType
 inferExpr (ExprBlock exprs) = do
   env <- getEnv
   env' <- foldM foldBlock env $ NonEmpty.init exprs
@@ -153,9 +181,9 @@ fresh = do
   putState s {count = count s + 1}
   return $ letters !! count s
 
-instantiate :: Scheme Type -> Infer Type
+instantiate :: Substitutable a => Scheme a -> Infer a
 instantiate (ForAll variables t) = do
-  variables' <- mapM (const $ TypeVariable <$> fresh) variables
+  variables' <- forM variables $ const $ TypeVariable <$> fresh
   let subst = Map.fromList $ zip variables variables'
   return $ apply subst t
 
