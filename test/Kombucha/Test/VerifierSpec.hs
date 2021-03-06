@@ -52,6 +52,26 @@ spec = describe "verifier" $ do
       \proof x + y -> y + x;"
       `shouldBe` Right ()
 
+    verify
+      "claim shadow: 0 |- 0 + 0;\
+      \proof 0 -> {\
+      \    let x = 0;\
+      \    let y = {\
+      \        let x = 0;\
+      \        x\
+      \    };\
+      \    x + y\
+      \};"
+      `shouldBe` Left (TypeError $ AlreadyBound "x")
+
+    verify
+      "claim shadow: 0 |- 0;\
+      \proof x -> {\
+      \    let x = 0;\
+      \    x\
+      \};"
+      `shouldBe` Left (TypeError $ AlreadyBound "x")
+
   it "verifies claims with axioms" $ do
     verify
       "axiom create: 0 |- A;\

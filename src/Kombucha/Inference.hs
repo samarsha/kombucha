@@ -32,7 +32,8 @@ data Constraint = Type :~ Type
 type Env = Map Name (Scheme Type)
 
 data TypeError
-  = ArityMismatch [Type] [Type]
+  = AlreadyBound Name
+  | ArityMismatch [Type] [Type]
   | InfiniteType Name Type
   | TypeMismatch Type Type
   | UnboundVariable Name
@@ -128,7 +129,7 @@ inferClaim
     { inference = ForAll _ (lhs :|- rhs),
       proof = input `Proves` output
     } =
-    restoreEnv $ do
+    checkEnv $ do
       inputResource <- inferPattern input
       outputType <- inferExpr output
 
@@ -158,27 +159,29 @@ inferExpr (ExprApply name arg) = do
   resultType <- ResourceVariable <$> fresh
   constrain $ nameType :~ TypeInference (argType :|- resultType)
   return $ TypeResource resultType
-inferExpr (ExprBlock exprs) = restoreEnv $ foldM (const inferExpr) (TypeResource ResourceUnit) exprs
+inferExpr (ExprBlock exprs) = checkEnv $ foldM (const inferExpr) (TypeResource ResourceUnit) exprs
 
 inferPattern :: Pattern -> Infer Resource
 inferPattern PatternUnit = return ResourceUnit
 inferPattern (PatternBind name) = do
-  -- TODO: Disallow shadowing?
+  before <- getState
+  when (name `Map.member` env before) $ inferError $ AlreadyBound name
+
   var <- ResourceVariable <$> fresh
-  state <- getState
-  putState state {env = Map.insert name (ForAll [] $ TypeResource var) $ env state}
+  modifyState $ \state ->
+    state {env = Map.insert name (ForAll [] $ TypeResource var) $ env state}
+
   return var
 inferPattern (PatternTuple patterns) = ResourceTuple <$> mapM inferPattern patterns
 
-restoreEnv :: Infer a -> Infer a
-restoreEnv infer = do
+checkEnv :: Infer a -> Infer a
+checkEnv infer = do
   before <- getState
   result <- infer
   after <- getState
 
   let unusedVars = env after `Map.difference` env before
   unless (null unusedVars) $ inferError $ UnusedVariables $ Map.keys unusedVars
-  modifyState $ \state -> state {env = env before}
 
   return result
 
