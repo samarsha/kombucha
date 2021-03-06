@@ -154,7 +154,7 @@ spec = describe "parser" $ do
           inference =
             ForAll ["X", "Y"] $
               ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-                `Infers` ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
+                :|- ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
         }
 
     axiom' "axiom flip_ebit: ebit X Y |- ebit Y X;"
@@ -163,7 +163,7 @@ spec = describe "parser" $ do
           inference =
             ForAll ["X", "Y"] $
               ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
-                `Infers` ResourceAtom "ebit" [ParamVariable "Y", ParamVariable "X"]
+                :|- ResourceAtom "ebit" [ParamVariable "Y", ParamVariable "X"]
         }
 
     axiom' `shouldFailOn` "axiom qbit_to_ebit: qbit X Y |- ebit X Y"
@@ -182,7 +182,7 @@ spec = describe "parser" $ do
           inference =
             ForAll ["X", "Y"] $
               ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-                `Infers` ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"],
+                :|- ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"],
           proof = PatternBind "q" `Proves` ExprVariable "q"
         }
 

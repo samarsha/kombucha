@@ -69,8 +69,8 @@ instance Substitutable Type where
   freeVariables (TypeVariable name) = Set.singleton name
 
 instance Substitutable Inference where
-  apply subst (r1 `Infers` r2) = apply subst r1 `Infers` apply subst r2
-  freeVariables (r1 `Infers` r2) = freeVariables r1 `Set.union` freeVariables r2
+  apply subst (r1 :|- r2) = apply subst r1 :|- apply subst r2
+  freeVariables (r1 :|- r2) = freeVariables r1 `Set.union` freeVariables r2
 
 instance Substitutable Resource where
   apply _ ResourceUnit = ResourceUnit
@@ -126,7 +126,7 @@ inferClaim Claim {inference = scheme, proof = pattern `Proves` expr} = do
   let patternType = TypeResource patternResource
   constrain $ patternType :~ exprType
 
-  inference@(input `Infers` output) <- instantiate scheme
+  inference@(input :|- output) <- instantiate scheme
   constrain $ TypeResource input :~ patternType
   constrain $ TypeResource output :~ exprType
   return inference
@@ -147,7 +147,7 @@ inferExpr (ExprApply name arg) = do
   nameType <- lookupEnv name
   argType <- inferExpr arg >>= resourceType . fst
   resultType <- ResourceVariable <$> fresh
-  constrain $ nameType :~ TypeInference (argType `Infers` resultType)
+  constrain $ nameType :~ TypeInference (argType :|- resultType)
   passEnv $ TypeResource resultType
 inferExpr (ExprBlock exprs) = do
   env <- getEnv
@@ -227,7 +227,7 @@ constrain c@(t1 :~ t2)
 
 unify :: Type -> Type -> Solve Subst
 unify t1 t2 | t1 == t2 = return Map.empty
-unify (TypeInference (r1 `Infers` r2)) (TypeInference (r3 `Infers` r4)) =
+unify (TypeInference (r1 :|- r2)) (TypeInference (r3 :|- r4)) =
   unifyZip [TypeResource r1, TypeResource r2] [TypeResource r3, TypeResource r4]
 unify (TypeResource (ResourceAtom name1 params1)) (TypeResource (ResourceAtom name2 params2))
   | name1 == name2 = unifyZip (TypeParam <$> params1) (TypeParam <$> params2)
@@ -250,13 +250,13 @@ unifyZip (t1 : ts1) (t2 : ts2) = do
 unifyZip t1 t2 = throwE $ ArityMismatch t1 t2
 
 runSolve :: [Constraint] -> Either TypeError Subst
-runSolve constraints = runExcept $ solve (Map.empty, constraints)
+runSolve constraints = runExcept $ solve Map.empty constraints
 
-solve :: (Subst, [Constraint]) -> Solve Subst
-solve (subst, []) = return subst
-solve (subst, t1 :~ t2 : constraints) = do
+solve :: Subst -> [Constraint] -> Solve Subst
+solve subst [] = return subst
+solve subst (t1 :~ t2 : constraints) = do
   subst' <- unify t1 t2
-  solve (subst' `compose` subst, apply subst' constraints)
+  solve (subst' `compose` subst) (apply subst' constraints)
 
 compose :: Subst -> Subst -> Subst
 s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1

@@ -75,7 +75,7 @@ data Claim = Claim
   }
   deriving (Eq, Show)
 
-data Inference = Resource `Infers` Resource
+data Inference = Resource :|- Resource
   deriving (Eq, Show)
 
 data Proof = Pattern `Proves` Expr
@@ -104,7 +104,7 @@ data Type
   deriving (Eq, Show)
 
 inferenceScheme :: Inference -> Scheme Inference
-inferenceScheme inference@(lhs `Infers` rhs) = ForAll (nub variables) inference
+inferenceScheme inference@(lhs :|- rhs) = ForAll (nub variables) inference
   where
     variables = resourceVariables lhs ++ resourceVariables rhs
 

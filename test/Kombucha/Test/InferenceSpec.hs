@@ -48,9 +48,9 @@ spec = describe "type inference" $ do
     let typeExpr' =
           typeExpr $
             Map.fromList
-              [ ("foo", ForAll [] $ TypeInference $ ResourceUnit `Infers` ResourceAtom "atom" []),
-                ("bar", ForAll ["A"] $ TypeInference $ ResourceUnit `Infers` ResourceVariable "A"),
-                ("baz", ForAll ["B"] $ TypeInference $ ResourceVariable "B" `Infers` ResourceVariable "B")
+              [ ("foo", ForAll [] $ TypeInference $ ResourceUnit :|- ResourceAtom "atom" []),
+                ("bar", ForAll ["A"] $ TypeInference $ ResourceUnit :|- ResourceVariable "A"),
+                ("baz", ForAll ["B"] $ TypeInference $ ResourceVariable "B" :|- ResourceVariable "B")
               ]
 
     typeExpr' (ExprApply "foo" ExprUnit) `shouldBe` Right (TypeResource $ ResourceAtom "atom" [])
@@ -83,7 +83,7 @@ spec = describe "type inference" $ do
     checkClaim'
       Claim
         { name = "identity",
-          inference = ForAll ["A"] $ ResourceVariable "A" `Infers` ResourceVariable "A",
+          inference = ForAll ["A"] $ ResourceVariable "A" :|- ResourceVariable "A",
           proof = PatternBind "x" `Proves` ExprVariable "x"
         }
       `shouldBe` Right ()
@@ -91,7 +91,7 @@ spec = describe "type inference" $ do
     checkClaim'
       Claim
         { name = "fake_identity",
-          inference = ForAll ["A"] $ ResourceVariable "A" `Infers` ResourceVariable "A",
+          inference = ForAll ["A"] $ ResourceVariable "A" :|- ResourceVariable "A",
           proof = PatternBind "x" `Proves` ExprUnit
         }
       `shouldBe` Left (TypeMismatch (TypeResource ResourceUnit) (TypeResource ResourceUnit))
@@ -99,7 +99,7 @@ spec = describe "type inference" $ do
     checkClaim'
       Claim
         { name = "transmogrify",
-          inference = ForAll ["A", "B"] $ ResourceVariable "A" `Infers` ResourceVariable "B",
+          inference = ForAll ["A", "B"] $ ResourceVariable "A" :|- ResourceVariable "B",
           proof = PatternBind "x" `Proves` ExprVariable "x"
         }
       `shouldBe` Left (TypeMismatch (TypeResource ResourceUnit) (TypeResource ResourceUnit))

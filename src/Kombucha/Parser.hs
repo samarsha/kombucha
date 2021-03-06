@@ -127,7 +127,7 @@ parseInference = do
   lhs <- resource
   symbol "|-"
   rhs <- resource
-  return $ lhs `Infers` rhs
+  return $ lhs :|- rhs
 
 resource :: Parser Resource
 resource =
