@@ -32,7 +32,6 @@ type Env = Map Name (Scheme Type)
 
 data TypeError
   = ArityMismatch [Type] [Type]
-  | ConstrainsVariable Name Type
   | InfiniteType Name Type
   | TypeMismatch Type Type
   | UnboundVariable Name
