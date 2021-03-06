@@ -9,7 +9,7 @@ import Test.Hspec
 
 spec :: Spec
 spec = describe "type inference" $ do
-  it "infers expression types with empty environment" $ do
+  it "infers expression types" $ do
     let exprType' = exprType mempty
 
     exprType' ExprUnit `shouldBe` Right (TypeResource ResourceUnit)
@@ -44,7 +44,7 @@ spec = describe "type inference" $ do
       )
       `shouldBe` Left (ArityMismatch [] [TypeResource ResourceUnit])
 
-  it "infers expression types with non-empty environment" $ do
+  it "infers expression types with environment" $ do
     let exprType' =
           exprType $
             Map.fromList

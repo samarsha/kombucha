@@ -101,6 +101,8 @@ instance Substitutable Param where
 checkDocument :: Document -> Either TypeError ()
 checkDocument = flip foldM_ Map.empty $ \env declaration ->
   case declaration of
+    DeclareAxiom Axiom {name, inference} ->
+      Right $ Map.insert name (TypeInference <$> inference) env
     DeclareClaim claim@Claim {name, inference} -> do
       checkClaim env claim
       Right $ Map.insert name (TypeInference <$> inference) env
@@ -161,6 +163,7 @@ inferExpr (ExprBlock exprs) = restoreEnv $ foldM (const inferExpr) (TypeResource
 inferPattern :: Pattern -> Infer Resource
 inferPattern PatternUnit = return ResourceUnit
 inferPattern (PatternBind name) = do
+  -- TODO: Disallow shadowing?
   var <- ResourceVariable <$> fresh
   state <- getState
   putState state {env = Map.insert name (ForAll [] $ TypeResource var) $ env state}
