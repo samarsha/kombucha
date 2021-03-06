@@ -103,7 +103,7 @@ instance Substitutable Param where
 checkClaim :: Env -> Claim -> Either TypeError ()
 checkClaim env claim = do
   -- TODO: Check that claim doesn't constrain type variables.
-  (_, constraints) <- runInfer env (inferClaim claim)
+  (_, constraints) <- runInfer env $ inferClaim claim
   void $ runSolve constraints
 
 typeExpr :: Env -> Expr -> Either TypeError Type
