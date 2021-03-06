@@ -10,67 +10,67 @@ import Test.Hspec
 spec :: Spec
 spec = describe "type inference" $ do
   it "infers expression types with empty environment" $ do
-    let typeExpr' = typeExpr mempty
+    let exprType' = exprType mempty
 
-    typeExpr' ExprUnit `shouldBe` Right (TypeResource ResourceUnit)
+    exprType' ExprUnit `shouldBe` Right (TypeResource ResourceUnit)
 
-    typeExpr' (ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
+    exprType' (ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Right (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
 
-    typeExpr' (ExprLet PatternUnit ExprUnit) `shouldBe` Right (TypeResource ResourceUnit)
+    exprType' (ExprLet PatternUnit ExprUnit) `shouldBe` Right (TypeResource ResourceUnit)
 
-    typeExpr' (ExprBlock $ ExprLet (PatternBind "x") ExprUnit :| [ExprVariable "x"])
+    exprType' (ExprBlock $ ExprLet (PatternBind "x") ExprUnit :| [ExprVariable "x"])
       `shouldBe` Right (TypeResource ResourceUnit)
 
-    typeExpr'
+    exprType'
       ( ExprBlock $
           ExprLet (PatternBind "x") (ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
             :| [ExprVariable "x"]
       )
       `shouldBe` Right (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
 
-    typeExpr' (ExprVariable "x") `shouldBe` Left (UnboundVariable "x")
+    exprType' (ExprVariable "x") `shouldBe` Left (UnboundVariable "x")
 
-    typeExpr' (ExprLet PatternUnit $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
+    exprType' (ExprLet PatternUnit $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Left
         ( TypeMismatch
             (TypeResource ResourceUnit)
             (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
         )
 
-    typeExpr'
+    exprType'
       ( ExprLet (PatternTuple $ TwoOrMore PatternUnit PatternUnit []) $
           ExprTuple $ TwoOrMore ExprUnit ExprUnit [ExprUnit]
       )
       `shouldBe` Left (ArityMismatch [] [TypeResource ResourceUnit])
 
   it "infers expression types with non-empty environment" $ do
-    let typeExpr' =
-          typeExpr $
+    let exprType' =
+          exprType $
             Map.fromList
               [ ("foo", ForAll [] $ TypeInference $ ResourceUnit :|- ResourceAtom "atom" []),
                 ("bar", ForAll ["A"] $ TypeInference $ ResourceUnit :|- ResourceVariable "A"),
                 ("baz", ForAll ["B"] $ TypeInference $ ResourceVariable "B" :|- ResourceVariable "B")
               ]
 
-    typeExpr' (ExprApply "foo" ExprUnit) `shouldBe` Right (TypeResource $ ResourceAtom "atom" [])
-    typeExpr' (ExprApply "bar" ExprUnit) `shouldBe` Right (TypeResource $ ResourceVariable "c")
-    typeExpr' (ExprApply "baz" ExprUnit) `shouldBe` Right (TypeResource ResourceUnit)
+    exprType' (ExprApply "foo" ExprUnit) `shouldBe` Right (TypeResource $ ResourceAtom "atom" [])
+    exprType' (ExprApply "bar" ExprUnit) `shouldBe` Right (TypeResource $ ResourceVariable "c")
+    exprType' (ExprApply "baz" ExprUnit) `shouldBe` Right (TypeResource ResourceUnit)
 
-    typeExpr' (ExprApply "baz" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
+    exprType' (ExprApply "baz" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Right (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
 
-    typeExpr' (ExprApply "baz" $ ExprApply "bar" $ ExprApply "baz" ExprUnit)
+    exprType' (ExprApply "baz" $ ExprApply "bar" $ ExprApply "baz" ExprUnit)
       `shouldBe` Right (TypeResource $ ResourceVariable "i")
 
-    typeExpr' (ExprApply "foo" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
+    exprType' (ExprApply "foo" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Left
         ( TypeMismatch
             (TypeResource ResourceUnit)
             (TypeResource $ ResourceTuple $ TwoOrMore ResourceUnit ResourceUnit [])
         )
 
-    typeExpr' (ExprApply "bar" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
+    exprType' (ExprApply "bar" $ ExprTuple $ TwoOrMore ExprUnit ExprUnit [])
       `shouldBe` Left
         ( TypeMismatch
             (TypeResource ResourceUnit)

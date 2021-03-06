@@ -2,7 +2,7 @@ module Kombucha.Inference
   ( Env,
     TypeError (..),
     checkClaim,
-    typeExpr,
+    exprType,
   )
 where
 
@@ -10,7 +10,8 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State (StateT, evalStateT)
+import qualified Control.Monad.Trans.State as State
 import Control.Monad.Trans.Writer
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map (Map)
@@ -41,36 +42,36 @@ data TypeError
   | UnboundVariable Name
   deriving (Eq, Show)
 
-type Subst = Map Name Type
+type Substitution = Map Name Type
 
 type Solve = Except TypeError
 
 class Substitutable a where
-  apply :: Subst -> a -> a
-  freeVariables :: a -> Set Name
+  apply :: Substitution -> a -> a
+  freeVars :: a -> Set Name
 
 instance Substitutable a => Substitutable [a] where
   apply = map . apply
-  freeVariables = foldr (Set.union . freeVariables) Set.empty
+  freeVars = foldr (Set.union . freeVars) Set.empty
 
 instance Substitutable Constraint where
-  apply subst (t1 :~ t2) = apply subst t1 :~ apply subst t2
-  freeVariables (t1 :~ t2) = freeVariables t1 `Set.union` freeVariables t2
+  apply subst (type1 :~ type2) = apply subst type1 :~ apply subst type2
+  freeVars (type1 :~ type2) = freeVars type1 `Set.union` freeVars type2
 
 instance Substitutable Type where
   apply subst (TypeInference inference) = TypeInference $ apply subst inference
   apply subst (TypeResource resource) = TypeResource $ apply subst resource
   apply subst (TypeParam param) = TypeParam $ apply subst param
-  apply subst t@(TypeVariable name) = Map.findWithDefault t name subst
+  apply subst var@(TypeVariable name) = Map.findWithDefault var name subst
 
-  freeVariables (TypeInference inference) = freeVariables inference
-  freeVariables (TypeResource resource) = freeVariables resource
-  freeVariables (TypeParam param) = freeVariables param
-  freeVariables (TypeVariable name) = Set.singleton name
+  freeVars (TypeInference inference) = freeVars inference
+  freeVars (TypeResource resource) = freeVars resource
+  freeVars (TypeParam param) = freeVars param
+  freeVars (TypeVariable name) = Set.singleton name
 
 instance Substitutable Inference where
-  apply subst (r1 :|- r2) = apply subst r1 :|- apply subst r2
-  freeVariables (r1 :|- r2) = freeVariables r1 `Set.union` freeVariables r2
+  apply subst (resource1 :|- resource2) = apply subst resource1 :|- apply subst resource2
+  freeVars (resource1 :|- resource2) = freeVars resource1 `Set.union` freeVars resource2
 
 instance Substitutable Resource where
   apply _ ResourceUnit = ResourceUnit
@@ -83,10 +84,10 @@ instance Substitutable Resource where
       Just _ -> error "Type kind can't be substituted here."
       Nothing -> resource
 
-  freeVariables ResourceUnit = Set.empty
-  freeVariables (ResourceAtom _ params) = freeVariables params
-  freeVariables (ResourceTuple rs) = freeVariables $ TwoOrMore.toList rs
-  freeVariables (ResourceVariable name) = Set.singleton name
+  freeVars ResourceUnit = Set.empty
+  freeVars (ResourceAtom _ params) = freeVars params
+  freeVars (ResourceTuple resources) = freeVars $ TwoOrMore.toList resources
+  freeVars (ResourceVariable name) = Set.singleton name
 
 instance Substitutable Param where
   apply _ param@(ParamValue _) = param
@@ -97,8 +98,8 @@ instance Substitutable Param where
       Just _ -> error "Type kind can't be substituted here."
       Nothing -> param
 
-  freeVariables (ParamValue _) = Set.empty
-  freeVariables (ParamVariable name) = Set.singleton name
+  freeVars (ParamValue _) = Set.empty
+  freeVars (ParamVariable name) = Set.singleton name
 
 checkClaim :: Env -> Claim -> Either TypeError ()
 checkClaim env claim = do
@@ -106,11 +107,11 @@ checkClaim env claim = do
   (_, constraints) <- runInfer env $ inferClaim claim
   void $ runSolve constraints
 
-typeExpr :: Env -> Expr -> Either TypeError Type
-typeExpr env expr = do
-  ((t, _), constraints) <- runInfer env $ inferExpr expr
+exprType :: Env -> Expr -> Either TypeError Type
+exprType env expr = do
+  ((type', _), constraints) <- runInfer env $ inferExpr expr
   subst <- runSolve constraints
-  return $ apply subst t
+  return $ apply subst type'
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
 runInfer env (Infer m) =
@@ -119,16 +120,16 @@ runInfer env (Infer m) =
       InferState {count = 0}
 
 inferClaim :: Claim -> Infer Inference
-inferClaim Claim {inference = scheme, proof = pattern `Proves` expr} = do
-  (patternResource, env) <- inferPattern pattern
-  exprType <- fst <$> withEnv env (inferExpr expr)
+inferClaim Claim {inference = scheme, proof = input `Proves` output} = do
+  (inputResource, env) <- inferPattern input
+  outputType <- fst <$> withEnv env (inferExpr output)
 
-  let patternType = TypeResource patternResource
-  constrain $ patternType :~ exprType
+  let inputType = TypeResource inputResource
+  constrain $ inputType :~ outputType
 
-  inference@(input :|- output) <- instantiate scheme
-  constrain $ TypeResource input :~ patternType
-  constrain $ TypeResource output :~ exprType
+  inference@(lhs :|- rhs) <- instantiate scheme
+  constrain $ TypeResource lhs :~ inputType
+  constrain $ TypeResource rhs :~ outputType
   return inference
 
 inferExpr :: Expr -> Infer (Type, Env)
@@ -138,10 +139,10 @@ inferExpr (ExprTuple exprs) = do
   types <- fmap fst <$> mapM inferExpr exprs
   resources <- mapM resourceType types
   passEnv $ TypeResource $ ResourceTuple resources
-inferExpr (ExprLet pattern expr) = do
-  (resource, env) <- inferPattern pattern
-  exprType <- fst <$> inferExpr expr
-  constrain $ TypeResource resource :~ exprType
+inferExpr (ExprLet binding value) = do
+  (lhs, env) <- inferPattern binding
+  rhs <- fst <$> inferExpr value
+  constrain $ TypeResource lhs :~ rhs
   return (TypeResource ResourceUnit, env)
 inferExpr (ExprApply name arg) = do
   nameType <- lookupEnv name
@@ -152,20 +153,20 @@ inferExpr (ExprApply name arg) = do
 inferExpr (ExprBlock exprs) = do
   env <- getEnv
   env' <- foldM foldBlock env $ NonEmpty.init exprs
-  t <- fmap fst $ withEnv env' $ inferExpr $ NonEmpty.last exprs
-  return (t, env)
+  type' <- fmap fst $ withEnv env' $ inferExpr $ NonEmpty.last exprs
+  return (type', env)
   where
     foldBlock env blockExpr = do
-      (t, env') <- withEnv env $ inferExpr blockExpr
-      constrain $ TypeResource ResourceUnit :~ t
+      (type', env') <- withEnv env $ inferExpr blockExpr
+      constrain $ TypeResource ResourceUnit :~ type'
       return env'
 
 inferPattern :: Pattern -> Infer (Resource, Env)
 inferPattern PatternUnit = passEnv ResourceUnit
 inferPattern (PatternBind name) = do
   env <- getEnv
-  rv <- ResourceVariable <$> fresh
-  return (rv, Map.insert name (ForAll [] $ TypeResource rv) env)
+  var <- ResourceVariable <$> fresh
+  return (var, Map.insert name (ForAll [] $ TypeResource var) env)
 inferPattern (PatternTuple patterns) = do
   results <- mapM inferPattern patterns
   let resources = fst <$> results
@@ -177,21 +178,21 @@ letters = [1 ..] >>= flip replicateM ['a' .. 'z']
 
 fresh :: Infer Name
 fresh = do
-  s <- getState
-  putState s {count = count s + 1}
-  return $ letters !! count s
+  state <- getState
+  putState state {count = count state + 1}
+  return $ letters !! count state
 
 instantiate :: Substitutable a => Scheme a -> Infer a
-instantiate (ForAll variables t) = do
-  variables' <- forM variables $ const $ TypeVariable <$> fresh
-  let subst = Map.fromList $ zip variables variables'
-  return $ apply subst t
+instantiate (ForAll vars type') = do
+  vars' <- forM vars $ const $ TypeVariable <$> fresh
+  let subst = Map.fromList $ zip vars vars'
+  return $ apply subst type'
 
 resourceType :: Type -> Infer Resource
-resourceType t = do
-  rv <- ResourceVariable <$> fresh
-  constrain $ TypeResource rv :~ t
-  return rv
+resourceType type' = do
+  var <- ResourceVariable <$> fresh
+  constrain $ TypeResource var :~ type'
+  return var
 
 getEnv :: Infer Env
 getEnv = Infer ask
@@ -215,59 +216,67 @@ throwError :: TypeError -> Infer a
 throwError = Infer . lift . lift . lift . throwE
 
 getState :: Infer InferState
-getState = Infer . lift $ lift get
+getState = Infer . lift $ lift State.get
 
 putState :: InferState -> Infer ()
-putState = Infer . lift . lift . put
+putState = Infer . lift . lift . State.put
 
 constrain :: Constraint -> Infer ()
-constrain c@(t1 :~ t2)
-  | t1 /= t2 = Infer . lift $ tell [c]
+constrain constraint@(type1 :~ type2)
+  | type1 /= type2 = Infer . lift $ tell [constraint]
   | otherwise = return ()
 
-unify :: Type -> Type -> Solve Subst
-unify t1 t2 | t1 == t2 = return Map.empty
-unify (TypeInference (r1 :|- r2)) (TypeInference (r3 :|- r4)) =
-  unifyZip [TypeResource r1, TypeResource r2] [TypeResource r3, TypeResource r4]
-unify (TypeResource (ResourceAtom name1 params1)) (TypeResource (ResourceAtom name2 params2))
+unify :: Type -> Type -> Solve Substitution
+unify type1 type2 | type1 == type2 = return Map.empty
+unify (TypeInference (in1 :|- out1)) (TypeInference (in2 :|- out2)) =
+  unifyZip
+    [TypeResource in1, TypeResource out1]
+    [TypeResource in2, TypeResource out2]
+unify (TypeResource resource1) (TypeResource resource2) = unifyResource resource1 resource2
+unify (TypeParam (ParamVariable var)) param@(TypeParam _) = var `bind` param
+unify param@(TypeParam _) (TypeParam (ParamVariable var)) = var `bind` param
+unify (TypeVariable var) type' = var `bind` type'
+unify type' (TypeVariable var) = var `bind` type'
+unify type1 type2 = throwE $ TypeMismatch type1 type2
+
+unifyResource :: Resource -> Resource -> Solve Substitution
+unifyResource (ResourceAtom name1 params1) (ResourceAtom name2 params2)
   | name1 == name2 = unifyZip (TypeParam <$> params1) (TypeParam <$> params2)
-unify (TypeResource (ResourceTuple rs1)) (TypeResource (ResourceTuple rs2)) =
-  unifyZip (TypeResource <$> TwoOrMore.toList rs1) (TypeResource <$> TwoOrMore.toList rs2)
-unify (TypeResource (ResourceVariable rv)) t@(TypeResource _) = rv `bind` t
-unify t@(TypeResource _) (TypeResource (ResourceVariable rv)) = rv `bind` t
-unify (TypeParam (ParamVariable pv)) t@(TypeParam _) = pv `bind` t
-unify t@(TypeParam _) (TypeParam (ParamVariable pv)) = pv `bind` t
-unify (TypeVariable tv) t = tv `bind` t
-unify t (TypeVariable tv) = tv `bind` t
-unify t1 t2 = throwE $ TypeMismatch t1 t2
+unifyResource (ResourceTuple resources1) (ResourceTuple resources2) =
+  unifyZip
+    (TypeResource <$> TwoOrMore.toList resources1)
+    (TypeResource <$> TwoOrMore.toList resources2)
+unifyResource (ResourceVariable var) resource = var `bind` TypeResource resource
+unifyResource resource (ResourceVariable var) = var `bind` TypeResource resource
+unifyResource resource1 resource2 = throwE $ TypeMismatch (TypeResource resource1) (TypeResource resource2)
 
-unifyZip :: [Type] -> [Type] -> Solve Subst
+unifyZip :: [Type] -> [Type] -> Solve Substitution
 unifyZip [] [] = return Map.empty
-unifyZip (t1 : ts1) (t2 : ts2) = do
-  subst1 <- unify t1 t2
-  subst2 <- unifyZip (apply subst1 ts1) (apply subst1 ts2)
+unifyZip (type1 : types1) (type2 : types2) = do
+  subst1 <- unify type1 type2
+  subst2 <- unifyZip (apply subst1 types1) (apply subst1 types2)
   return $ subst2 `compose` subst1
-unifyZip t1 t2 = throwE $ ArityMismatch t1 t2
+unifyZip type1 type2 = throwE $ ArityMismatch type1 type2
 
-runSolve :: [Constraint] -> Either TypeError Subst
+runSolve :: [Constraint] -> Either TypeError Substitution
 runSolve constraints = runExcept $ solve Map.empty constraints
 
-solve :: Subst -> [Constraint] -> Solve Subst
+solve :: Substitution -> [Constraint] -> Solve Substitution
 solve subst [] = return subst
-solve subst (t1 :~ t2 : constraints) = do
-  subst' <- unify t1 t2
+solve subst (type1 :~ type2 : constraints) = do
+  subst' <- unify type1 type2
   solve (subst' `compose` subst) (apply subst' constraints)
 
-compose :: Subst -> Subst -> Subst
-s1 `compose` s2 = Map.map (apply s1) s2 `Map.union` s1
+compose :: Substitution -> Substitution -> Substitution
+subst1 `compose` subst2 = Map.map (apply subst1) subst2 `Map.union` subst1
 
-bind :: Name -> Type -> Solve Subst
-name `bind` t
-  | t == TypeVariable name = return Map.empty
-  | t == TypeResource (ResourceVariable name) = return Map.empty
-  | t == TypeParam (ParamVariable name) = return Map.empty
-  | occursCheck name t = throwE $ InfiniteType name t
-  | otherwise = return $ Map.singleton name t
+bind :: Name -> Type -> Solve Substitution
+name `bind` type'
+  | type' == TypeVariable name = return Map.empty
+  | type' == TypeResource (ResourceVariable name) = return Map.empty
+  | type' == TypeParam (ParamVariable name) = return Map.empty
+  | occursCheck name type' = throwE $ InfiniteType name type'
+  | otherwise = return $ Map.singleton name type'
 
 occursCheck :: Substitutable a => Name -> a -> Bool
-occursCheck name s = name `Set.member` freeVariables s
+occursCheck name x = name `Set.member` freeVars x
