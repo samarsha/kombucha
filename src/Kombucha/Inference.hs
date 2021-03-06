@@ -2,6 +2,7 @@ module Kombucha.Inference
   ( Env,
     TypeError (..),
     checkClaim,
+    checkDocument,
     exprType,
   )
 where
@@ -97,6 +98,14 @@ instance Substitutable Param where
   freeVars (ParamValue _) = Set.empty
   freeVars (ParamVariable name) = Set.singleton name
 
+checkDocument :: Document -> Either TypeError ()
+checkDocument = flip foldM_ Map.empty $ \env declaration ->
+  case declaration of
+    DeclareClaim claim@Claim {name, inference} -> do
+      checkClaim env claim
+      Right $ Map.insert name (TypeInference <$> inference) env
+    _ -> error "Unsupported declaration."
+
 checkClaim :: Env -> Claim -> Either TypeError ()
 checkClaim env claim@Claim {inference = ForAll rigidVars _} = do
   constraints <- snd <$> runInfer env (inferClaim claim)
@@ -116,16 +125,14 @@ inferClaim
   Claim
     { inference = ForAll _ (lhs :|- rhs),
       proof = input `Proves` output
-    } = do
-    inputResource <- inferPattern input
-    outputType <- inferExpr output
+    } =
+    restoreEnv $ do
+      inputResource <- inferPattern input
+      outputType <- inferExpr output
 
-    InferState {env} <- getState
-    unless (Map.null env) $ inferError $ UnusedVariables $ Map.keys env
-
-    let inputType = TypeResource inputResource
-    constrain $ TypeResource lhs :~ inputType
-    constrain $ TypeResource rhs :~ outputType
+      let inputType = TypeResource inputResource
+      constrain $ TypeResource lhs :~ inputType
+      constrain $ TypeResource rhs :~ outputType
 
 inferExpr :: Expr -> Infer Type
 inferExpr ExprUnit = return $ TypeResource ResourceUnit
@@ -149,16 +156,7 @@ inferExpr (ExprApply name arg) = do
   resultType <- ResourceVariable <$> fresh
   constrain $ nameType :~ TypeInference (argType :|- resultType)
   return $ TypeResource resultType
-inferExpr (ExprBlock exprs) = do
-  before <- getState
-  type' <- foldM (const inferExpr) (TypeResource ResourceUnit) exprs
-  after <- getState
-
-  let unusedVars = env after `Map.difference` env before
-  unless (null unusedVars) $ inferError $ UnusedVariables $ Map.keys unusedVars
-  modifyState $ \state -> state {env = env before}
-
-  return type'
+inferExpr (ExprBlock exprs) = restoreEnv $ foldM (const inferExpr) (TypeResource ResourceUnit) exprs
 
 inferPattern :: Pattern -> Infer Resource
 inferPattern PatternUnit = return ResourceUnit
@@ -168,6 +166,18 @@ inferPattern (PatternBind name) = do
   putState state {env = Map.insert name (ForAll [] $ TypeResource var) $ env state}
   return var
 inferPattern (PatternTuple patterns) = ResourceTuple <$> mapM inferPattern patterns
+
+restoreEnv :: Infer a -> Infer a
+restoreEnv infer = do
+  before <- getState
+  result <- infer
+  after <- getState
+
+  let unusedVars = env after `Map.difference` env before
+  unless (null unusedVars) $ inferError $ UnusedVariables $ Map.keys unusedVars
+  modifyState $ \state -> state {env = env before}
+
+  return result
 
 letters :: [String]
 letters = [1 ..] >>= flip replicateM ['a' .. 'z']

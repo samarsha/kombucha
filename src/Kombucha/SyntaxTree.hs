@@ -38,6 +38,9 @@ type Name = String
 data Scheme a = ForAll [Name] a
   deriving (Eq, Show)
 
+instance Functor Scheme where
+  fmap f (ForAll names x) = ForAll names $ f x
+
 data Param
   = ParamValue Name
   | ParamVariable Name
