@@ -94,7 +94,7 @@ spec = describe "type inference" $ do
           inference = ForAll ["A"] $ ResourceVariable "A" :|- ResourceVariable "A",
           proof = PatternBind "x" `Proves` ExprUnit
         }
-      `shouldBe` Left (TypeMismatch (TypeResource ResourceUnit) (TypeResource ResourceUnit))
+      `shouldBe` Left (TypeMismatch (TypeResource (ResourceVariable "A")) (TypeResource ResourceUnit))
 
     checkClaim'
       Claim
@@ -102,4 +102,4 @@ spec = describe "type inference" $ do
           inference = ForAll ["A", "B"] $ ResourceVariable "A" :|- ResourceVariable "B",
           proof = PatternBind "x" `Proves` ExprVariable "x"
         }
-      `shouldBe` Left (TypeMismatch (TypeResource ResourceUnit) (TypeResource ResourceUnit))
+      `shouldBe` Left (TypeMismatch (TypeResource $ ResourceVariable "B") (TypeResource $ ResourceVariable "A"))

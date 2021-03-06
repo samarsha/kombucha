@@ -44,7 +44,7 @@ data TypeError
 
 type Substitution = Map Name Type
 
-type Solve = Except TypeError
+type Solve = ReaderT (Set Name) (Except TypeError)
 
 class Substitutable a where
   apply :: Substitution -> a -> a
@@ -102,15 +102,14 @@ instance Substitutable Param where
   freeVars (ParamVariable name) = Set.singleton name
 
 checkClaim :: Env -> Claim -> Either TypeError ()
-checkClaim env claim = do
-  -- TODO: Check that claim doesn't constrain type variables.
-  (_, constraints) <- runInfer env $ inferClaim claim
-  void $ runSolve constraints
+checkClaim env claim@Claim {inference = ForAll rigidVars _} = do
+  constraints <- snd <$> runInfer env (inferClaim claim)
+  void $ runSolve (Set.fromList rigidVars) constraints
 
 exprType :: Env -> Expr -> Either TypeError Type
 exprType env expr = do
   ((type', _), constraints) <- runInfer env $ inferExpr expr
-  subst <- runSolve constraints
+  subst <- runSolve Set.empty constraints
   return $ apply subst type'
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
@@ -119,18 +118,20 @@ runInfer env (Infer m) =
     evalStateT (runWriterT $ runReaderT m env) $
       InferState {count = 0}
 
-inferClaim :: Claim -> Infer Inference
-inferClaim Claim {inference = scheme, proof = input `Proves` output} = do
-  (inputResource, env) <- inferPattern input
-  outputType <- fst <$> withEnv env (inferExpr output)
+inferClaim :: Claim -> Infer ()
+inferClaim
+  Claim
+    { inference = ForAll _ (lhs :|- rhs),
+      proof = input `Proves` output
+    } = do
+    (inputResource, env) <- inferPattern input
+    outputType <- fst <$> withEnv env (inferExpr output)
 
-  let inputType = TypeResource inputResource
-  constrain $ inputType :~ outputType
+    let inputType = TypeResource inputResource
+    constrain $ inputType :~ outputType
 
-  inference@(lhs :|- rhs) <- instantiate scheme
-  constrain $ TypeResource lhs :~ inputType
-  constrain $ TypeResource rhs :~ outputType
-  return inference
+    constrain $ TypeResource lhs :~ inputType
+    constrain $ TypeResource rhs :~ outputType
 
 inferExpr :: Expr -> Infer (Type, Env)
 inferExpr ExprUnit = passEnv $ TypeResource ResourceUnit
@@ -210,10 +211,10 @@ lookupEnv name = do
   env <- getEnv
   case Map.lookup name env of
     Just scheme -> instantiate scheme
-    Nothing -> throwError $ UnboundVariable name
+    Nothing -> inferError $ UnboundVariable name
 
-throwError :: TypeError -> Infer a
-throwError = Infer . lift . lift . lift . throwE
+inferError :: TypeError -> Infer a
+inferError = Infer . lift . lift . lift . throwE
 
 getState :: Infer InferState
 getState = Infer . lift $ lift State.get
@@ -227,28 +228,48 @@ constrain constraint@(type1 :~ type2)
   | otherwise = return ()
 
 unify :: Type -> Type -> Solve Substitution
-unify type1 type2 | type1 == type2 = return Map.empty
-unify (TypeInference (in1 :|- out1)) (TypeInference (in2 :|- out2)) =
-  unifyZip
-    [TypeResource in1, TypeResource out1]
-    [TypeResource in2, TypeResource out2]
-unify (TypeResource resource1) (TypeResource resource2) = unifyResource resource1 resource2
-unify (TypeParam (ParamVariable var)) param@(TypeParam _) = var `bind` param
-unify param@(TypeParam _) (TypeParam (ParamVariable var)) = var `bind` param
-unify (TypeVariable var) type' = var `bind` type'
-unify type' (TypeVariable var) = var `bind` type'
-unify type1 type2 = throwE $ TypeMismatch type1 type2
+unify type1 type2
+  | type1 == type2 = return Map.empty
+  | otherwise = do
+    rigidVars <- ask
+    let free var = not $ var `Set.member` rigidVars
+
+    case (type1, type2) of
+      (TypeInference (in1 :|- out1), TypeInference (in2 :|- out2)) ->
+        unifyZip
+          [TypeResource in1, TypeResource out1]
+          [TypeResource in2, TypeResource out2]
+      (TypeResource resource1, TypeResource resource2) ->
+        unifyResource resource1 resource2
+      (TypeParam (ParamVariable var), param@(TypeParam _))
+        | free var -> var `bind` param
+      (param@(TypeParam _), TypeParam (ParamVariable var))
+        | free var -> var `bind` param
+      (TypeVariable var, type')
+        | free var -> var `bind` type'
+      (type', TypeVariable var)
+        | free var -> var `bind` type'
+      _ -> solveError $ TypeMismatch type1 type2
 
 unifyResource :: Resource -> Resource -> Solve Substitution
-unifyResource (ResourceAtom name1 params1) (ResourceAtom name2 params2)
-  | name1 == name2 = unifyZip (TypeParam <$> params1) (TypeParam <$> params2)
-unifyResource (ResourceTuple resources1) (ResourceTuple resources2) =
-  unifyZip
-    (TypeResource <$> TwoOrMore.toList resources1)
-    (TypeResource <$> TwoOrMore.toList resources2)
-unifyResource (ResourceVariable var) resource = var `bind` TypeResource resource
-unifyResource resource (ResourceVariable var) = var `bind` TypeResource resource
-unifyResource resource1 resource2 = throwE $ TypeMismatch (TypeResource resource1) (TypeResource resource2)
+unifyResource resource1 resource2
+  | resource1 == resource2 = return Map.empty
+  | otherwise = do
+    rigidVars <- ask
+    let free var = not $ var `Set.member` rigidVars
+
+    case (resource1, resource2) of
+      (ResourceAtom name1 params1, ResourceAtom name2 params2)
+        | name1 == name2 -> unifyZip (TypeParam <$> params1) (TypeParam <$> params2)
+      (ResourceTuple resources1, ResourceTuple resources2) ->
+        unifyZip
+          (TypeResource <$> TwoOrMore.toList resources1)
+          (TypeResource <$> TwoOrMore.toList resources2)
+      (ResourceVariable var, resource)
+        | free var -> var `bind` TypeResource resource
+      (resource, ResourceVariable var)
+        | free var -> var `bind` TypeResource resource
+      _ -> solveError $ TypeMismatch (TypeResource resource1) (TypeResource resource2)
 
 unifyZip :: [Type] -> [Type] -> Solve Substitution
 unifyZip [] [] = return Map.empty
@@ -256,10 +277,10 @@ unifyZip (type1 : types1) (type2 : types2) = do
   subst1 <- unify type1 type2
   subst2 <- unifyZip (apply subst1 types1) (apply subst1 types2)
   return $ subst2 `compose` subst1
-unifyZip type1 type2 = throwE $ ArityMismatch type1 type2
+unifyZip type1 type2 = solveError $ ArityMismatch type1 type2
 
-runSolve :: [Constraint] -> Either TypeError Substitution
-runSolve constraints = runExcept $ solve Map.empty constraints
+runSolve :: Set Name -> [Constraint] -> Either TypeError Substitution
+runSolve rigidVars constraints = runExcept $ runReaderT (solve Map.empty constraints) rigidVars
 
 solve :: Substitution -> [Constraint] -> Solve Substitution
 solve subst [] = return subst
@@ -275,8 +296,15 @@ name `bind` type'
   | type' == TypeVariable name = return Map.empty
   | type' == TypeResource (ResourceVariable name) = return Map.empty
   | type' == TypeParam (ParamVariable name) = return Map.empty
-  | occursCheck name type' = throwE $ InfiniteType name type'
-  | otherwise = return $ Map.singleton name type'
+  | occursCheck name type' = solveError $ InfiniteType name type'
+  | otherwise = do
+    rigidVars <- ask
+    if name `Set.member` rigidVars
+      then error "Cannot bind a rigid type variable."
+      else return $ Map.singleton name type'
 
 occursCheck :: Substitutable a => Name -> a -> Bool
 occursCheck name x = name `Set.member` freeVars x
+
+solveError :: TypeError -> Solve a
+solveError = lift . throwE
