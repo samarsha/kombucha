@@ -90,11 +90,22 @@ spec = describe "type inference" $ do
 
     checkClaim'
       Claim
-        { name = "fake_identity",
+        { name = "clone",
+          inference =
+            ForAll ["A"] $
+              ResourceVariable "A"
+                :|- ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "A") []),
+          proof = PatternBind "x" `Proves` ExprTuple (TwoOrMore (ExprVariable "x") (ExprVariable "x") [])
+        }
+      `shouldBe` Left (UnboundVariable "x")
+
+    checkClaim'
+      Claim
+        { name = "wrong_identity",
           inference = ForAll ["A"] $ ResourceVariable "A" :|- ResourceVariable "A",
           proof = PatternBind "x" `Proves` ExprUnit
         }
-      `shouldBe` Left (TypeMismatch (TypeResource (ResourceVariable "A")) (TypeResource ResourceUnit))
+      `shouldBe` Left (UnusedVariables ["x"])
 
     checkClaim'
       Claim
@@ -103,3 +114,11 @@ spec = describe "type inference" $ do
           proof = PatternBind "x" `Proves` ExprVariable "x"
         }
       `shouldBe` Left (TypeMismatch (TypeResource $ ResourceVariable "B") (TypeResource $ ResourceVariable "A"))
+
+    checkClaim'
+      Claim
+        { name = "destructor",
+          inference = ForAll ["A"] $ ResourceVariable "A" :|- ResourceUnit,
+          proof = PatternBind "x" `Proves` ExprUnit
+        }
+      `shouldBe` Left (UnusedVariables ["x"])

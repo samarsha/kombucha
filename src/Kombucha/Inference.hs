@@ -13,7 +13,6 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State (StateT, evalStateT)
 import qualified Control.Monad.Trans.State as State
 import Control.Monad.Trans.Writer
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -21,13 +20,10 @@ import qualified Data.Set as Set
 import Kombucha.SyntaxTree
 import qualified Kombucha.TwoOrMore as TwoOrMore
 
-newtype Infer a
-  = Infer
-      ( ReaderT Env (WriterT [Constraint] (StateT InferState (Except TypeError))) a
-      )
+newtype Infer a = Infer (WriterT [Constraint] (StateT InferState (Except TypeError)) a)
   deriving (Applicative, Functor, Monad)
 
-newtype InferState = InferState {count :: Int}
+data InferState = InferState {count :: Int, env :: Env}
 
 data Constraint = Type :~ Type
   deriving (Show)
@@ -35,11 +31,12 @@ data Constraint = Type :~ Type
 type Env = Map Name (Scheme Type)
 
 data TypeError
-  = TypeMismatch Type Type
-  | ArityMismatch [Type] [Type]
-  | InfiniteType Name Type
+  = ArityMismatch [Type] [Type]
   | ConstrainsVariable Name Type
+  | InfiniteType Name Type
+  | TypeMismatch Type Type
   | UnboundVariable Name
+  | UnusedVariables [Name]
   deriving (Eq, Show)
 
 type Substitution = Map Name Type
@@ -108,15 +105,12 @@ checkClaim env claim@Claim {inference = ForAll rigidVars _} = do
 
 exprType :: Env -> Expr -> Either TypeError Type
 exprType env expr = do
-  ((type', _), constraints) <- runInfer env $ inferExpr expr
+  (type', constraints) <- runInfer env $ inferExpr expr
   subst <- runSolve Set.empty constraints
   return $ apply subst type'
 
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
-runInfer env (Infer m) =
-  runExcept $
-    evalStateT (runWriterT $ runReaderT m env) $
-      InferState {count = 0}
+runInfer env (Infer m) = runExcept $ evalStateT (runWriterT m) $ InferState {count = 0, env}
 
 inferClaim :: Claim -> Infer ()
 inferClaim
@@ -124,55 +118,57 @@ inferClaim
     { inference = ForAll _ (lhs :|- rhs),
       proof = input `Proves` output
     } = do
-    (inputResource, env) <- inferPattern input
-    outputType <- fst <$> withEnv env (inferExpr output)
+    inputResource <- inferPattern input
+    outputType <- inferExpr output
+
+    InferState {env} <- getState
+    unless (Map.null env) $ inferError $ UnusedVariables $ Map.keys env
 
     let inputType = TypeResource inputResource
-    constrain $ inputType :~ outputType
-
     constrain $ TypeResource lhs :~ inputType
     constrain $ TypeResource rhs :~ outputType
 
-inferExpr :: Expr -> Infer (Type, Env)
-inferExpr ExprUnit = passEnv $ TypeResource ResourceUnit
-inferExpr (ExprVariable name) = lookupEnv name >>= passEnv
+inferExpr :: Expr -> Infer Type
+inferExpr ExprUnit = return $ TypeResource ResourceUnit
+inferExpr (ExprVariable name) = do
+  type' <- lookupEnv name
+  state <- getState
+  putState state {env = Map.delete name $ env state}
+  return type'
 inferExpr (ExprTuple exprs) = do
-  types <- fmap fst <$> mapM inferExpr exprs
+  types <- mapM inferExpr exprs
   resources <- mapM resourceType types
-  passEnv $ TypeResource $ ResourceTuple resources
+  return $ TypeResource $ ResourceTuple resources
 inferExpr (ExprLet binding value) = do
-  (lhs, env) <- inferPattern binding
-  rhs <- fst <$> inferExpr value
+  lhs <- inferPattern binding
+  rhs <- inferExpr value
   constrain $ TypeResource lhs :~ rhs
-  return (TypeResource ResourceUnit, env)
+  return $ TypeResource ResourceUnit
 inferExpr (ExprApply name arg) = do
   nameType <- lookupEnv name
-  argType <- inferExpr arg >>= resourceType . fst
+  argType <- inferExpr arg >>= resourceType
   resultType <- ResourceVariable <$> fresh
   constrain $ nameType :~ TypeInference (argType :|- resultType)
-  passEnv $ TypeResource resultType
+  return $ TypeResource resultType
 inferExpr (ExprBlock exprs) = do
-  env <- getEnv
-  env' <- foldM foldBlock env $ NonEmpty.init exprs
-  type' <- fmap fst $ withEnv env' $ inferExpr $ NonEmpty.last exprs
-  return (type', env)
-  where
-    foldBlock env blockExpr = do
-      (type', env') <- withEnv env $ inferExpr blockExpr
-      constrain $ TypeResource ResourceUnit :~ type'
-      return env'
+  before <- getState
+  type' <- foldM (const inferExpr) (TypeResource ResourceUnit) exprs
+  after <- getState
 
-inferPattern :: Pattern -> Infer (Resource, Env)
-inferPattern PatternUnit = passEnv ResourceUnit
+  let unusedVars = env after `Map.difference` env before
+  unless (null unusedVars) $ inferError $ UnusedVariables $ Map.keys unusedVars
+  modifyState $ \state -> state {env = env before}
+
+  return type'
+
+inferPattern :: Pattern -> Infer Resource
+inferPattern PatternUnit = return ResourceUnit
 inferPattern (PatternBind name) = do
-  env <- getEnv
   var <- ResourceVariable <$> fresh
-  return (var, Map.insert name (ForAll [] $ TypeResource var) env)
-inferPattern (PatternTuple patterns) = do
-  results <- mapM inferPattern patterns
-  let resources = fst <$> results
-  let env = foldl1 Map.union $ snd <$> results
-  return (ResourceTuple resources, env)
+  state <- getState
+  putState state {env = Map.insert name (ForAll [] $ TypeResource var) $ env state}
+  return var
+inferPattern (PatternTuple patterns) = ResourceTuple <$> mapM inferPattern patterns
 
 letters :: [String]
 letters = [1 ..] >>= flip replicateM ['a' .. 'z']
@@ -195,36 +191,28 @@ resourceType type' = do
   constrain $ TypeResource var :~ type'
   return var
 
-getEnv :: Infer Env
-getEnv = Infer ask
-
-withEnv :: Env -> Infer a -> Infer a
-withEnv env (Infer m) = Infer $ local (const env) m
-
-passEnv :: a -> Infer (a, Env)
-passEnv x = do
-  env <- getEnv
-  return (x, env)
-
 lookupEnv :: Name -> Infer Type
 lookupEnv name = do
-  env <- getEnv
+  InferState {env} <- getState
   case Map.lookup name env of
     Just scheme -> instantiate scheme
     Nothing -> inferError $ UnboundVariable name
 
 inferError :: TypeError -> Infer a
-inferError = Infer . lift . lift . lift . throwE
+inferError = Infer . lift . lift . throwE
 
 getState :: Infer InferState
-getState = Infer . lift $ lift State.get
+getState = Infer . lift $ State.get
 
 putState :: InferState -> Infer ()
-putState = Infer . lift . lift . State.put
+putState = Infer . lift . State.put
+
+modifyState :: (InferState -> InferState) -> Infer ()
+modifyState = Infer . lift . State.modify
 
 constrain :: Constraint -> Infer ()
 constrain constraint@(type1 :~ type2)
-  | type1 /= type2 = Infer . lift $ tell [constraint]
+  | type1 /= type2 = Infer $ tell [constraint]
   | otherwise = return ()
 
 unify :: Type -> Type -> Solve Substitution
