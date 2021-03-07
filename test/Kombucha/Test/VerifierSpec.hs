@@ -14,12 +14,7 @@ spec = describe "verifier" $ do
     verify "claim wrong_identity: A |- A; proof x -> 0;" `shouldBe` Left (TypeError $ UnusedVariables ["x"])
 
     verify "claim transmogrify: A |- B; proof x -> x;"
-      `shouldBe` Left
-        ( TypeError $
-            TypeMismatch
-              (TypeResource $ ResourceVariable "B")
-              (TypeResource $ ResourceVariable "A")
-        )
+      `shouldBe` Left (TypeError $ TypeMismatch (TypeVariable "B") (TypeVariable "A"))
 
     verify "claim destructor: A |- 0; proof x -> 0;" `shouldBe` Left (TypeError $ UnusedVariables ["x"])
 
@@ -100,12 +95,7 @@ spec = describe "verifier" $ do
       \\
       \claim create: 0 |- A;\
       \proof 0 -> nothing 0;"
-      `shouldBe` Left
-        ( TypeError $
-            TypeMismatch
-              (TypeResource $ ResourceVariable "A")
-              (TypeResource ResourceUnit)
-        )
+      `shouldBe` Left (TypeError $ TypeMismatch (TypeVariable "A") (TypeResource ResourceUnit))
 
     verify
       "axiom clone: A |- A + A;\
@@ -122,8 +112,8 @@ spec = describe "verifier" $ do
       `shouldBe` Left
         ( TypeError $
             TypeMismatch
-              (TypeResource $ ResourceTuple $ TwoOrMore (ResourceVariable "A") (ResourceVariable "A") [])
-              (TypeResource $ ResourceVariable "A")
+              (TypeResource $ ResourceTuple $ TwoOrMore (TypeVariable "A") (TypeVariable "A") [])
+              (TypeVariable "A")
         )
 
     verify

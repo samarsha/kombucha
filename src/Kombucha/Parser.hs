@@ -11,7 +11,7 @@ module Kombucha.Parser
 where
 
 import Control.Monad
-import Data.List.NonEmpty
+import qualified Data.List.NonEmpty as NonEmpty
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
 import Text.Parsec
@@ -108,7 +108,7 @@ axiom = do
   reserved "axiom"
   name <- identifier
   symbol ":"
-  inference <- inferenceScheme <$> parseInference
+  inference <- parseInference
   semi
   return Axiom {name, inference}
 
@@ -117,7 +117,7 @@ claim = do
   reserved "claim"
   name <- identifier
   symbol ":"
-  inference <- inferenceScheme <$> parseInference
+  inference <- parseInference
   semi
   proof <- parseProof
   return Claim {name, inference, proof}
@@ -129,32 +129,33 @@ parseInference = do
   rhs <- resource
   return $ lhs :|- rhs
 
-resource :: Parser Resource
+resource :: Parser Type
 resource =
-  ResourceTuple <$> try (sepBy2 resourceTerm $ symbol "+")
+  TypeResource . ResourceTuple <$> try (sepBy2 resourceTerm $ symbol "+")
     <|> resourceTerm
 
-resourceTerm :: Parser Resource
+resourceTerm :: Parser Type
 resourceTerm =
   parens resource
     <|> try resourceRepeat
-    <|> ResourceVariable <$> try variable
-    <|> ResourceAtom <$> identifier <*> many param
+    <|> TypeVariable <$> try variable
+    <|> TypeResource <$> (ResourceAtom <$> identifier <*> many param)
 
-resourceRepeat :: Parser Resource
+resourceRepeat :: Parser Type
 resourceRepeat = do
   n <- natural
   case n of
-    0 -> optional resourceTerm >> return ResourceUnit
+    0 -> optional resourceTerm >> return (TypeResource ResourceUnit)
     1 -> resourceTerm
     _ -> do
       r <- resourceTerm
-      return $ ResourceTuple $ TwoOrMore r r $ replicate (fromInteger $ n - 2) r
+      let resources = TwoOrMore r r $ replicate (fromInteger $ n - 2) r
+      return $ TypeResource $ ResourceTuple resources
 
-param :: Parser Param
+param :: Parser Type
 param =
-  ParamVariable <$> try variable
-    <|> ParamValue <$> identifier
+  TypeVariable <$> try variable
+    <|> TypeParam <$> identifier
 
 parseProof :: Parser Proof
 parseProof = do
@@ -185,7 +186,7 @@ expr =
 exprTerm :: Parser Expr
 exprTerm =
   parens expr
-    <|> braces (ExprBlock . fromList <$> sepBy1 expr semi)
+    <|> braces (ExprBlock . NonEmpty.fromList <$> sepBy1 expr semi)
     <|> (symbol "0" >> return ExprUnit)
     <|> exprApplyOrVariable
 

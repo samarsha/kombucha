@@ -60,89 +60,104 @@ spec = describe "parser" $ do
   it "parses resources" $ do
     let resource' = parse resource ""
 
-    resource' "A" `shouldParse` ResourceVariable "A"
-    resource' "(A)" `shouldParse` ResourceVariable "A"
-    resource' "a" `shouldParse` ResourceVariable "a"
-    resource' "(a)" `shouldParse` ResourceVariable "a"
+    resource' "A" `shouldParse` TypeVariable "A"
+    resource' "(A)" `shouldParse` TypeVariable "A"
+    resource' "a" `shouldParse` TypeVariable "a"
+    resource' "(a)" `shouldParse` TypeVariable "a"
 
-    resource' "qbit" `shouldParse` ResourceAtom "qbit" []
-    resource' "qbit X" `shouldParse` ResourceAtom "qbit" [ParamVariable "X"]
-    resource' "qbit X Y" `shouldParse` ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-    resource' "qbit Alice Y" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamVariable "Y"]
-    resource' "qbit Alice Bob" `shouldParse` ResourceAtom "qbit" [ParamValue "Alice", ParamValue "Bob"]
+    resource' "qbit" `shouldParse` TypeResource (ResourceAtom "qbit" [])
+    resource' "qbit X" `shouldParse` TypeResource (ResourceAtom "qbit" [TypeVariable "X"])
+    resource' "qbit X Y" `shouldParse` TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+    resource' "qbit Alice Y" `shouldParse` TypeResource (ResourceAtom "qbit" [TypeParam "Alice", TypeVariable "Y"])
+    resource' "qbit Alice Bob" `shouldParse` TypeResource (ResourceAtom "qbit" [TypeParam "Alice", TypeParam "Bob"])
 
-    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [])
-    resource' "A + B" `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [])
+    resource' "A + B" `shouldParse` TypeResource (ResourceTuple $ TwoOrMore (TypeVariable "A") (TypeVariable "B") [])
+    resource' "A + B" `shouldParse` TypeResource (ResourceTuple $ TwoOrMore (TypeVariable "A") (TypeVariable "B") [])
 
     resource' "A + B + C"
-      `shouldParse` ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [ResourceVariable "C"])
+      `shouldParse` TypeResource (ResourceTuple $ TwoOrMore (TypeVariable "A") (TypeVariable "B") [TypeVariable "C"])
 
     resource' "(A + B) + C"
-      `shouldParse` ResourceTuple
-        ( TwoOrMore
-            (ResourceTuple $ TwoOrMore (ResourceVariable "A") (ResourceVariable "B") [])
-            (ResourceVariable "C")
-            []
+      `shouldParse` TypeResource
+        ( ResourceTuple
+            ( TwoOrMore
+                (TypeResource $ ResourceTuple $ TwoOrMore (TypeVariable "A") (TypeVariable "B") [])
+                (TypeVariable "C")
+                []
+            )
         )
 
     resource' "(qbit X Y + qbit X Y) + qbit X Y"
-      `shouldParse` ResourceTuple
-        ( TwoOrMore
-            ( ResourceTuple $
-                TwoOrMore
-                  (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-                  (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-                  []
+      `shouldParse` TypeResource
+        ( ResourceTuple
+            ( TwoOrMore
+                ( TypeResource $
+                    ResourceTuple $
+                      TwoOrMore
+                        (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                        (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                        []
+                )
+                (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                []
             )
-            (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-            []
         )
 
-    resource' "0" `shouldParse` ResourceUnit
-    resource' "0 A" `shouldParse` ResourceUnit
+    resource' "0" `shouldParse` TypeResource ResourceUnit
+    resource' "0 A" `shouldParse` TypeResource ResourceUnit
 
     resource' "5 A"
-      `shouldParse` ResourceTuple
-        ( TwoOrMore
-            (ResourceVariable "A")
-            (ResourceVariable "A")
-            [ResourceVariable "A", ResourceVariable "A", ResourceVariable "A"]
+      `shouldParse` TypeResource
+        ( ResourceTuple
+            ( TwoOrMore
+                (TypeVariable "A")
+                (TypeVariable "A")
+                [TypeVariable "A", TypeVariable "A", TypeVariable "A"]
+            )
         )
 
     resource' "2 qbit X Y"
-      `shouldParse` ResourceTuple
-        ( TwoOrMore
-            (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-            (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-            []
+      `shouldParse` TypeResource
+        ( ResourceTuple
+            ( TwoOrMore
+                (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                []
+            )
         )
 
     resource' "2 A + 3 B"
-      `shouldParse` ResourceTuple
-        ( TwoOrMore
-            (ResourceTuple (TwoOrMore (ResourceVariable "A") (ResourceVariable "A") []))
-            (ResourceTuple (TwoOrMore (ResourceVariable "B") (ResourceVariable "B") [ResourceVariable "B"]))
-            []
+      `shouldParse` TypeResource
+        ( ResourceTuple
+            ( TwoOrMore
+                (TypeResource $ ResourceTuple (TwoOrMore (TypeVariable "A") (TypeVariable "A") []))
+                (TypeResource $ ResourceTuple (TwoOrMore (TypeVariable "B") (TypeVariable "B") [TypeVariable "B"]))
+                []
+            )
         )
 
     resource' "2 qbit X Y + 3 qbit X Y"
-      `shouldParse` ResourceTuple
-        ( TwoOrMore
-            ( ResourceTuple
-                ( TwoOrMore
-                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-                    []
+      `shouldParse` TypeResource
+        ( ResourceTuple
+            ( TwoOrMore
+                ( TypeResource $
+                    ResourceTuple
+                      ( TwoOrMore
+                          (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                          (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                          []
+                      )
                 )
-            )
-            ( ResourceTuple
-                ( TwoOrMore
-                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-                    (ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"])
-                    [ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]]
+                ( TypeResource $
+                    ResourceTuple
+                      ( TwoOrMore
+                          (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                          (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                          [TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"]]
+                      )
                 )
+                []
             )
-            []
         )
 
   it "parses axioms" $ do
@@ -152,18 +167,16 @@ spec = describe "parser" $ do
       `shouldParse` Axiom
         { name = "qbit_to_ebit",
           inference =
-            ForAll ["X", "Y"] $
-              ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-                :|- ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
+            TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+              :|- TypeResource (ResourceAtom "ebit" [TypeVariable "X", TypeVariable "Y"])
         }
 
     axiom' "axiom flip_ebit: ebit X Y |- ebit Y X;"
       `shouldParse` Axiom
         { name = "flip_ebit",
           inference =
-            ForAll ["X", "Y"] $
-              ResourceAtom "ebit" [ParamVariable "X", ParamVariable "Y"]
-                :|- ResourceAtom "ebit" [ParamVariable "Y", ParamVariable "X"]
+            TypeResource (ResourceAtom "ebit" [TypeVariable "X", TypeVariable "Y"])
+              :|- TypeResource (ResourceAtom "ebit" [TypeVariable "Y", TypeVariable "X"])
         }
 
     axiom' `shouldFailOn` "axiom qbit_to_ebit: qbit X Y |- ebit X Y"
@@ -180,9 +193,8 @@ spec = describe "parser" $ do
       `shouldParse` Claim
         { name = "identity_qbit",
           inference =
-            ForAll ["X", "Y"] $
-              ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"]
-                :|- ResourceAtom "qbit" [ParamVariable "X", ParamVariable "Y"],
+            TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+              :|- TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"]),
           proof = PatternBind "q" `Proves` ExprVariable "q"
         }
 

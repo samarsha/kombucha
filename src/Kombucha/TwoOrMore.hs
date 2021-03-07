@@ -14,3 +14,7 @@ instance Traversable TwoOrMore where
 
 toList :: TwoOrMore a -> [a]
 toList (TwoOrMore x1 x2 xs) = x1 : x2 : xs
+
+fromList :: [a] -> TwoOrMore a
+fromList (x1 : x2 : xs) = TwoOrMore x1 x2 xs
+fromList _ = error "List has fewer than two items."

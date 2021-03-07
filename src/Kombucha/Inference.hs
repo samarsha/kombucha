@@ -29,7 +29,7 @@ data InferState = InferState {count :: Int, env :: Env}
 data Constraint = Type :~ Type
   deriving (Show)
 
-type Env = Map Name (Scheme Type)
+type Env = Map Name Scheme
 
 data TypeError
   = AlreadyBound Name
@@ -52,19 +52,30 @@ instance Substitutable a => Substitutable [a] where
   apply = map . apply
   freeVars = foldr (Set.union . freeVars) Set.empty
 
+instance Substitutable t => Substitutable (Qualified t) where
+  apply subst (predicates :=> type') = map (apply subst) predicates :=> apply subst type'
+  freeVars (predicates :=> type') = freeVars predicates `Set.union` freeVars type'
+
 instance Substitutable Constraint where
   apply subst (type1 :~ type2) = apply subst type1 :~ apply subst type2
   freeVars (type1 :~ type2) = freeVars type1 `Set.union` freeVars type2
 
+instance Substitutable Predicate where
+  apply subst (IsResource type') = IsResource $ apply subst type'
+  apply subst (IsParam type' name) = IsParam (apply subst type') name
+
+  freeVars (IsResource type') = freeVars type'
+  freeVars (IsParam type' _) = freeVars type'
+
 instance Substitutable Type where
   apply subst (TypeInference inference) = TypeInference $ apply subst inference
   apply subst (TypeResource resource) = TypeResource $ apply subst resource
-  apply subst (TypeParam param) = TypeParam $ apply subst param
+  apply _ (TypeParam param) = TypeParam param
   apply subst var@(TypeVariable name) = Map.findWithDefault var name subst
 
   freeVars (TypeInference inference) = freeVars inference
   freeVars (TypeResource resource) = freeVars resource
-  freeVars (TypeParam param) = freeVars param
+  freeVars (TypeParam _) = Set.empty
   freeVars (TypeVariable name) = Set.singleton name
 
 instance Substitutable Inference where
@@ -75,46 +86,34 @@ instance Substitutable Resource where
   apply _ ResourceUnit = ResourceUnit
   apply subst (ResourceAtom name params) = ResourceAtom name $ apply subst <$> params
   apply subst (ResourceTuple resources) = ResourceTuple $ apply subst <$> resources
-  apply subst resource@(ResourceVariable name) =
-    case Map.lookup name subst of
-      Just (TypeVariable name') -> ResourceVariable name'
-      Just (TypeResource resource') -> resource'
-      Just _ -> error "Type kind can't be substituted here."
-      Nothing -> resource
 
   freeVars ResourceUnit = Set.empty
   freeVars (ResourceAtom _ params) = freeVars params
   freeVars (ResourceTuple resources) = freeVars $ TwoOrMore.toList resources
-  freeVars (ResourceVariable name) = Set.singleton name
-
-instance Substitutable Param where
-  apply _ param@(ParamValue _) = param
-  apply subst param@(ParamVariable name) =
-    case Map.lookup name subst of
-      Just (TypeVariable name') -> ParamVariable name'
-      Just (TypeParam param') -> param'
-      Just _ -> error "Type kind can't be substituted here."
-      Nothing -> param
-
-  freeVars (ParamValue _) = Set.empty
-  freeVars (ParamVariable name) = Set.singleton name
 
 checkDocument :: Document -> Either TypeError ()
 checkDocument = flip foldM_ Map.empty $ \env declaration ->
   case declaration of
     DeclareAxiom Axiom {name, inference} ->
-      Right $ Map.insert name (TypeInference <$> inference) env
+      Right $ Map.insert name (inferenceScheme inference) env
     DeclareClaim claim@Claim {name, inference} -> do
       checkClaim env claim
-      Right $ Map.insert name (TypeInference <$> inference) env
+      Right $ Map.insert name (inferenceScheme inference) env
     _ -> error "Unsupported declaration."
 
-checkClaim :: Env -> Claim -> Either TypeError ()
-checkClaim env claim@Claim {inference = ForAll rigidVars _} = do
-  constraints <- snd <$> runInfer env (inferClaim claim)
-  void $ runSolve (Set.fromList rigidVars) constraints
+inferenceScheme :: Inference -> Scheme
+inferenceScheme inference = ForAll vars $ predicates :=> TypeInference inference
+  where
+    vars = freeVars inference
+    predicates = map (IsResource . TypeVariable) $ Set.toList vars
 
-exprType :: Env -> Expr -> Either TypeError Type
+checkClaim :: Env -> Claim -> Either TypeError ()
+checkClaim env claim@Claim {inference} = do
+  -- TODO: Check predicates.
+  (_, constraints) <- runInfer env (inferClaim claim)
+  void $ runSolve (freeVars inference) constraints
+
+exprType :: Env -> Expr -> Either TypeError (Qualified Type)
 exprType env expr = do
   (type', constraints) <- runInfer env $ inferExpr expr
   subst <- runSolve Set.empty constraints
@@ -123,56 +122,68 @@ exprType env expr = do
 runInfer :: Env -> Infer a -> Either TypeError (a, [Constraint])
 runInfer env (Infer m) = runExcept $ evalStateT (runWriterT m) $ InferState {count = 0, env}
 
-inferClaim :: Claim -> Infer ()
-inferClaim
-  Claim
-    { inference = ForAll _ (lhs :|- rhs),
-      proof = input `Proves` output
-    } =
-    checkEnv $ do
-      inputResource <- inferPattern input
-      outputType <- inferExpr output
+inferClaim :: Claim -> Infer (Qualified Type)
+inferClaim Claim {inference = lhs :|- rhs, proof = input `Proves` output} =
+  checkEnv $ do
+    inputPreds :=> inputType <- inferPattern input
+    outputPreds :=> outputType <- inferExpr output
 
-      let inputType = TypeResource inputResource
-      constrain $ TypeResource lhs :~ inputType
-      constrain $ TypeResource rhs :~ outputType
+    constrain $ lhs :~ inputType
+    constrain $ rhs :~ outputType
 
-inferExpr :: Expr -> Infer Type
-inferExpr ExprUnit = return $ TypeResource ResourceUnit
+    let vars = freeVars $ lhs :|- rhs
+    let varPreds = map (IsResource . TypeVariable) $ Set.toList vars
+    let predicates = varPreds ++ inputPreds ++ outputPreds
+    return $ predicates :=> TypeInference (inputType :|- outputType)
+
+inferExpr :: Expr -> Infer (Qualified Type)
+inferExpr ExprUnit = return $ [] :=> TypeResource ResourceUnit
 inferExpr (ExprVariable name) = do
   type' <- lookupEnv name
   state <- getState
   putState state {env = Map.delete name $ env state}
   return type'
 inferExpr (ExprTuple exprs) = do
-  types <- mapM inferExpr exprs
-  resources <- mapM resourceType types
-  return $ TypeResource $ ResourceTuple resources
+  (predicates, types) <- extractPredicates <$> mapM inferExpr exprs
+  return $ predicates :=> TypeResource (ResourceTuple $ TwoOrMore.fromList types)
 inferExpr (ExprLet binding value) = do
-  lhs <- inferPattern binding
-  rhs <- inferExpr value
-  constrain $ TypeResource lhs :~ rhs
-  return $ TypeResource ResourceUnit
+  lhsPreds :=> lhs <- inferPattern binding
+  rhsPreds :=> rhs <- inferExpr value
+  constrain $ lhs :~ rhs
+  return $ (lhsPreds ++ rhsPreds) :=> TypeResource ResourceUnit
 inferExpr (ExprApply name arg) = do
-  nameType <- lookupEnv name
-  argType <- inferExpr arg >>= resourceType
-  resultType <- ResourceVariable <$> fresh
+  namePreds :=> nameType <- lookupEnv name
+  argPreds :=> argType <- inferExpr arg
+  resultType <- fresh
   constrain $ nameType :~ TypeInference (argType :|- resultType)
-  return $ TypeResource resultType
-inferExpr (ExprBlock exprs) = checkEnv $ foldM (const inferExpr) (TypeResource ResourceUnit) exprs
+  return $ (namePreds ++ argPreds) :=> resultType
+inferExpr (ExprBlock exprs) =
+  checkEnv $
+    foldM (const inferExpr) ([] :=> TypeResource ResourceUnit) exprs
 
-inferPattern :: Pattern -> Infer Resource
-inferPattern PatternUnit = return ResourceUnit
+inferPattern :: Pattern -> Infer (Qualified Type)
+inferPattern PatternUnit = return $ [] :=> TypeResource ResourceUnit
 inferPattern (PatternBind name) = do
   before <- getState
   when (name `Map.member` env before) $ inferError $ AlreadyBound name
+  var <- fresh
+  let var' = [] :=> var
 
-  var <- ResourceVariable <$> fresh
   modifyState $ \state ->
-    state {env = Map.insert name (ForAll [] $ TypeResource var) $ env state}
+    state {env = Map.insert name (ForAll Set.empty var') $ env state}
 
-  return var
-inferPattern (PatternTuple patterns) = ResourceTuple <$> mapM inferPattern patterns
+  return var'
+inferPattern (PatternTuple patterns) = do
+  (predicates, types) <- extractPredicates <$> mapM inferPattern patterns
+  return $ predicates :=> TypeResource (ResourceTuple $ TwoOrMore.fromList types)
+
+extractPredicates :: Foldable t => t (Qualified a) -> ([Predicate], [a])
+extractPredicates =
+  foldr
+    ( \(predicates' :=> type') (predicates, types) ->
+        (predicates ++ predicates', type' : types)
+    )
+    ([], [])
 
 checkEnv :: Infer a -> Infer a
 checkEnv infer = do
@@ -188,25 +199,21 @@ checkEnv infer = do
 letters :: [String]
 letters = [1 ..] >>= flip replicateM ['a' .. 'z']
 
-fresh :: Infer Name
+fresh :: Infer Type
 fresh = do
   state <- getState
   putState state {count = count state + 1}
-  return $ letters !! count state
+  return $ TypeVariable $ letters !! count state
 
-instantiate :: Substitutable a => Scheme a -> Infer a
+instantiate :: Scheme -> Infer (Qualified Type)
 instantiate (ForAll vars type') = do
-  vars' <- forM vars $ const $ TypeVariable <$> fresh
-  let subst = Map.fromList $ zip vars vars'
+  varList' <- forM varList $ const fresh
+  let subst = Map.fromList $ zip varList varList'
   return $ apply subst type'
+  where
+    varList = Set.toList vars
 
-resourceType :: Type -> Infer Resource
-resourceType type' = do
-  var <- ResourceVariable <$> fresh
-  constrain $ TypeResource var :~ type'
-  return var
-
-lookupEnv :: Name -> Infer Type
+lookupEnv :: Name -> Infer (Qualified Type)
 lookupEnv name = do
   InferState {env} <- getState
   case Map.lookup name env of
@@ -239,15 +246,9 @@ unify type1 type2
 
     case (type1, type2) of
       (TypeInference (in1 :|- out1), TypeInference (in2 :|- out2)) ->
-        unifyZip
-          [TypeResource in1, TypeResource out1]
-          [TypeResource in2, TypeResource out2]
+        unifyZip [in1, out1] [in2, out2]
       (TypeResource resource1, TypeResource resource2) ->
         unifyResource resource1 resource2
-      (TypeParam (ParamVariable var), param@(TypeParam _))
-        | free var -> var `bind` param
-      (param@(TypeParam _), TypeParam (ParamVariable var))
-        | free var -> var `bind` param
       (TypeVariable var, type')
         | free var -> var `bind` type'
       (type', TypeVariable var)
@@ -257,21 +258,12 @@ unify type1 type2
 unifyResource :: Resource -> Resource -> Solve Substitution
 unifyResource resource1 resource2
   | resource1 == resource2 = return Map.empty
-  | otherwise = do
-    rigidVars <- ask
-    let free var = not $ var `Set.member` rigidVars
-
+  | otherwise =
     case (resource1, resource2) of
       (ResourceAtom name1 params1, ResourceAtom name2 params2)
-        | name1 == name2 -> unifyZip (TypeParam <$> params1) (TypeParam <$> params2)
+        | name1 == name2 -> unifyZip params1 params2
       (ResourceTuple resources1, ResourceTuple resources2) ->
-        unifyZip
-          (TypeResource <$> TwoOrMore.toList resources1)
-          (TypeResource <$> TwoOrMore.toList resources2)
-      (ResourceVariable var, resource)
-        | free var -> var `bind` TypeResource resource
-      (resource, ResourceVariable var)
-        | free var -> var `bind` TypeResource resource
+        unifyZip (TwoOrMore.toList resources1) (TwoOrMore.toList resources2)
       _ -> solveError $ TypeMismatch (TypeResource resource1) (TypeResource resource2)
 
 unifyZip :: [Type] -> [Type] -> Solve Substitution
@@ -297,8 +289,6 @@ subst1 `compose` subst2 = Map.map (apply subst1) subst2 `Map.union` subst1
 bind :: Name -> Type -> Solve Substitution
 name `bind` type'
   | type' == TypeVariable name = return Map.empty
-  | type' == TypeResource (ResourceVariable name) = return Map.empty
-  | type' == TypeParam (ParamVariable name) = return Map.empty
   | occursCheck name type' = solveError $ InfiniteType name type'
   | otherwise = do
     rigidVars <- ask

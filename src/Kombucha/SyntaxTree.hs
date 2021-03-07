@@ -1,28 +1,8 @@
-module Kombucha.SyntaxTree
-  ( Axiom (..),
-    Claim (..),
-    Declaration (..),
-    Document,
-    Expr (..),
-    Inference (..),
-    Name,
-    Param (..),
-    ParamSpec (..),
-    Pattern (..),
-    Proof (..),
-    Resource (..),
-    ResourceSpec (..),
-    Scheme (..),
-    Type (..),
-    inferenceScheme,
-  )
-where
+module Kombucha.SyntaxTree where
 
-import Data.List
 import Data.List.NonEmpty (NonEmpty)
-import Data.Maybe
+import Data.Set (Set)
 import Kombucha.TwoOrMore (TwoOrMore)
-import qualified Kombucha.TwoOrMore as TwoOrMore
 
 type Document = [Declaration]
 
@@ -35,15 +15,7 @@ data Declaration
 
 type Name = String
 
-data Scheme a = ForAll [Name] a
-  deriving (Eq, Show)
-
-instance Functor Scheme where
-  fmap f (ForAll names x) = ForAll names $ f x
-
-data Param
-  = ParamValue Name
-  | ParamVariable Name
+data Scheme = ForAll (Set Name) (Qualified Type)
   deriving (Eq, Show)
 
 data ParamSpec = ParamSpec
@@ -54,9 +26,8 @@ data ParamSpec = ParamSpec
 
 data Resource
   = ResourceUnit
-  | ResourceAtom Name [Param]
-  | ResourceTuple (TwoOrMore Resource)
-  | ResourceVariable Name
+  | ResourceAtom Name [Type]
+  | ResourceTuple (TwoOrMore Type)
   deriving (Eq, Show)
 
 data ResourceSpec = ResourceSpec
@@ -67,18 +38,18 @@ data ResourceSpec = ResourceSpec
 
 data Axiom = Axiom
   { name :: Name,
-    inference :: Scheme Inference
+    inference :: Inference
   }
   deriving (Eq, Show)
 
 data Claim = Claim
   { name :: Name,
-    inference :: Scheme Inference,
+    inference :: Inference,
     proof :: Proof
   }
   deriving (Eq, Show)
 
-data Inference = Resource :|- Resource
+data Inference = Type :|- Type
   deriving (Eq, Show)
 
 data Proof = Pattern `Proves` Expr
@@ -102,22 +73,14 @@ data Expr
 data Type
   = TypeInference Inference
   | TypeResource Resource
-  | TypeParam Param
+  | TypeParam Name
   | TypeVariable Name
   deriving (Eq, Show)
 
-inferenceScheme :: Inference -> Scheme Inference
-inferenceScheme inference@(lhs :|- rhs) = ForAll (nub variables) inference
-  where
-    variables = resourceVariables lhs ++ resourceVariables rhs
+data Qualified t = [Predicate] :=> t
+  deriving (Eq, Show)
 
-resourceVariables :: Resource -> [Name]
-resourceVariables resource = case resource of
-  ResourceUnit -> []
-  ResourceAtom _ params -> mapMaybe paramVariable params
-  ResourceTuple resources -> TwoOrMore.toList resources >>= resourceVariables
-  ResourceVariable name -> [name]
-
-paramVariable :: Param -> Maybe Name
-paramVariable (ParamVariable name) = Just name
-paramVariable (ParamValue _) = Nothing
+data Predicate
+  = IsResource Type
+  | IsParam Type Name
+  deriving (Eq, Show)
