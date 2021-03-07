@@ -77,7 +77,10 @@ sepBy2 p sep = do
   return $ TwoOrMore first second rest
 
 document :: Parser Document
-document = many declaration
+document = do
+  declarations <- many declaration
+  eof
+  return declarations
 
 declaration :: Parser Declaration
 declaration =
