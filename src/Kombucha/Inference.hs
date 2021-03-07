@@ -91,6 +91,8 @@ instance Substitutable Resource where
   freeVars (ResourceAtom _ params) = freeVars params
   freeVars (ResourceTuple resources) = freeVars $ TwoOrMore.toList resources
 
+-- * Type checking and inference
+
 checkDocument :: Document -> Either TypeError ()
 checkDocument = flip foldM_ Map.empty $ \env declaration ->
   case declaration of
@@ -236,6 +238,8 @@ constrain :: Constraint -> Infer ()
 constrain constraint@(type1 :~ type2)
   | type1 /= type2 = Infer $ tell [constraint]
   | otherwise = return ()
+
+-- * Type unification and constraint solving
 
 unify :: Type -> Type -> Solve Substitution
 unify type1 type2
