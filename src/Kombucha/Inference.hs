@@ -145,8 +145,9 @@ typePredicates env type' = case type' of
   TypeResource ResourceUnit -> return []
   TypeResource (ResourceAtom name givenParams) ->
     case Map.lookup name $ types env of
-      Just (DeclareResource ResourceSpec {params = expectedParams}) ->
-        return $ zipWith IsParam givenParams expectedParams
+      Just (DeclareResource ResourceSpec {params = expectedParams})
+        | length givenParams == length expectedParams ->
+          return $ zipWith IsParam givenParams expectedParams
       _ -> Left $ UnboundVariable name
   TypeResource (ResourceTuple resources) -> do
     predicates <- mapM (typePredicates env) $ TwoOrMore.toList resources
