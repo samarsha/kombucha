@@ -196,8 +196,8 @@ inferExpr (ExprTuple exprs) = do
   (predicates, types) <- extractPredicates <$> mapM inferExpr exprs
   return $ predicates :=> TypeResource (ResourceTuple $ TwoOrMore.fromList types)
 inferExpr (ExprLet binding value) = do
-  lhsPreds :=> lhs <- inferPattern binding
   rhsPreds :=> rhs <- inferExpr value
+  lhsPreds :=> lhs <- inferPattern binding
   constrain $ lhs :~ rhs
   return $ (lhsPreds ++ rhsPreds) :=> TypeResource ResourceUnit
 inferExpr (ExprApply name arg) = do
