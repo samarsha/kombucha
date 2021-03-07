@@ -13,7 +13,9 @@ main = do
     [filename] -> do
       text <- readFile filename
       case verify text of
-        Left err -> hPrint stderr err
+        Left err -> do
+          pHPrint stderr err
+          exitFailure
         Right predicates -> pPrint predicates
     _ -> do
       hPutStrLn stderr "Usage: kombucha <filename>"
