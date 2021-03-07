@@ -1,5 +1,6 @@
 module Kombucha.Test.VerifierSpec where
 
+import qualified Data.Map as Map
 import Kombucha.Inference
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
@@ -9,7 +10,9 @@ import Test.Hspec
 spec :: Spec
 spec = describe "verifier" $ do
   it "verifies claims" $ do
-    verify "claim identity: A |- A; proof x -> x;" `shouldBe` Right ()
+    verify "claim identity: A |- A; proof x -> x;"
+      `shouldBe` Right (Map.singleton "identity" [IsResource $ TypeVariable "A"])
+
     verify "claim clone: A |- A + A; proof x -> x + x;" `shouldBe` Left (TypeError $ UnboundVariable "x")
     verify "claim wrong_identity: A |- A; proof x -> 0;" `shouldBe` Left (TypeError $ UnusedVariables ["x"])
 
@@ -24,7 +27,12 @@ spec = describe "verifier" $ do
       \\
       \claim identity2: A |- A;\
       \proof x -> identity x;"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.fromList
+            [ ("identity", [IsResource $ TypeVariable "A"]),
+              ("identity2", [IsResource $ TypeVariable "A"])
+            ]
+        )
 
     verify
       "claim identity2: A |- A;\
@@ -40,12 +48,17 @@ spec = describe "verifier" $ do
     verify
       "claim associative: (A + B) + C |- A + (B + C);\
       \proof (x + y) + z -> x + (y + z);"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.singleton
+            "associative"
+            [IsResource $ TypeVariable "A", IsResource $ TypeVariable "B", IsResource $ TypeVariable "C"]
+        )
 
     verify
       "claim commutative: A + B |- B + A;\
       \proof x + y -> y + x;"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        (Map.singleton "commutative" [IsResource $ TypeVariable "A", IsResource $ TypeVariable "B"])
 
     verify
       "claim shadow: 0 |- 0 + 0;\
@@ -73,14 +86,24 @@ spec = describe "verifier" $ do
       \\
       \claim my_create: 0 |- A;\
       \proof 0 -> create 0;"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.fromList
+            [ ("create", [IsResource $ TypeVariable "A"]),
+              ("my_create", [IsResource $ TypeVariable "A"])
+            ]
+        )
 
     verify
       "axiom destroy: A |- 0;\
       \\
       \claim my_destroy: A |- 0;\
       \proof x -> destroy x;"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.fromList
+            [ ("destroy", [IsResource $ TypeVariable "A"]),
+              ("my_destroy", [IsResource $ TypeVariable "A"])
+            ]
+        )
 
     verify
       "axiom create: 0 |- A;\
@@ -88,7 +111,13 @@ spec = describe "verifier" $ do
       \\
       \claim create_and_destroy: 0 |- 0;\
       \proof 0 -> destroy (create 0);"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.fromList
+            [ ("create", [IsResource $ TypeVariable "A"]),
+              ("destroy", [IsResource $ TypeVariable "A"]),
+              ("create_and_destroy", [IsResource $ TypeVariable "c"])
+            ]
+        )
 
     verify
       "axiom nothing: 0 |- 0;\
@@ -102,7 +131,16 @@ spec = describe "verifier" $ do
       \\
       \claim double_clone: A |- (A + A) + (A + A);\
       \proof x -> clone (clone x);"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.fromList
+            [ ("clone", [IsResource $ TypeVariable "A"]),
+              ( "double_clone",
+                [ IsResource $ TypeResource (ResourceTuple (TwoOrMore (TypeVariable "A") (TypeVariable "A") [])),
+                  IsResource $ TypeVariable "A"
+                ]
+              )
+            ]
+        )
 
     verify
       "axiom clone: A |- A + A;\
@@ -124,4 +162,9 @@ spec = describe "verifier" $ do
       \    let (a + b) + (c + d) = clone (clone x);\
       \    a + b + c + d\
       \};"
-      `shouldBe` Right ()
+      `shouldBe` Right
+        ( Map.fromList
+            [ ("clone", [IsResource $ TypeVariable "A"]),
+              ("quadruple", [IsResource $ TypeVariable "A"])
+            ]
+        )

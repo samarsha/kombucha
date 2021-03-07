@@ -112,25 +112,28 @@ deleteTerm name env = env {terms = Map.delete name $ terms env}
 
 -- * Type checking and inference
 
-checkDocument :: Document -> Either TypeError ()
-checkDocument = flip foldM_ emptyEnv $ \env declaration ->
-  case declaration of
-    DeclareType param@(DeclareParam ParamSpec {name}) ->
-      return $ insertType name param env
-    DeclareType resource@(DeclareResource ResourceSpec {name}) ->
-      return $ insertType name resource env
-    DeclareAxiom Axiom {name, inference} -> do
-      scheme <- inferenceScheme env inference
-      return $ insertTerm name scheme env
-    DeclareClaim claim@Claim {name, inference} -> do
-      -- TODO: Check predicates.
-      void $ checkClaim env claim
-      scheme <- inferenceScheme env inference
-      return $ insertTerm name scheme env
+checkDocument :: Document -> Either TypeError (Map Name [Predicate])
+checkDocument document = snd <$> foldM foldDeclarations (emptyEnv, Map.empty) document
+  where
+    foldDeclarations (env, predicates) declaration =
+      case declaration of
+        DeclareType param@(DeclareParam ParamSpec {name}) ->
+          return (insertType name param env, predicates)
+        DeclareType resource@(DeclareResource ResourceSpec {name}) ->
+          return (insertType name resource env, predicates)
+        DeclareAxiom Axiom {name, inference} -> do
+          scheme@(ForAll _ (inferencePreds :=> _)) <- inferenceScheme env inference
+          let predicates' = Map.insert name inferencePreds predicates
+          return (insertTerm name scheme env, predicates')
+        DeclareClaim claim@Claim {name, inference} -> do
+          claimPreds <- checkClaim env claim
+          scheme@(ForAll _ (inferencePreds :=> _)) <- inferenceScheme env inference
+          let predicates' = Map.insert name (nub $ claimPreds ++ inferencePreds) predicates
+          return (insertTerm name scheme env, predicates')
 
 inferenceScheme :: Env -> Inference -> Either TypeError Scheme
 inferenceScheme env inference = do
-  predicates <- typePredicates env $ TypeInference inference
+  predicates <- nub <$> typePredicates env (TypeInference inference)
   return $ ForAll (freeVars inference) $ predicates :=> TypeInference inference
 
 typePredicates :: Env -> Type -> Either TypeError [Predicate]
@@ -225,9 +228,7 @@ inferPattern (PatternTuple patterns) = do
 extractPredicates :: Foldable t => t (Qualified a) -> ([Predicate], [a])
 extractPredicates =
   foldr
-    ( \(predicates' :=> type') (predicates, types) ->
-        (predicates ++ predicates', type' : types)
-    )
+    (\(predicates' :=> type') (predicates, types) -> (predicates ++ predicates', type' : types))
     ([], [])
 
 checkEnv :: Infer a -> Infer a
