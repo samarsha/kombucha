@@ -81,8 +81,8 @@ document = many declaration
 
 declaration :: Parser Declaration
 declaration =
-  DeclareParam <$> paramSpec
-    <|> DeclareResource <$> resourceSpec
+  DeclareType . DeclareParam <$> paramSpec
+    <|> DeclareType . DeclareResource <$> resourceSpec
     <|> DeclareAxiom <$> axiom
     <|> DeclareClaim <$> claim
 
@@ -99,9 +99,9 @@ resourceSpec :: Parser ResourceSpec
 resourceSpec = do
   reserved "resource"
   name <- identifier
-  parameters <- many identifier
+  params <- many identifier
   semi
-  return ResourceSpec {name, parameters}
+  return ResourceSpec {name, params}
 
 axiom :: Parser Axiom
 axiom = do

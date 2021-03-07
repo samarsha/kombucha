@@ -36,24 +36,9 @@ spec = describe "parser" $ do
   it "parses resource declarations" $ do
     let resourceSpec' = parse resourceSpec ""
 
-    resourceSpec' "resource qbit;"
-      `shouldParse` ResourceSpec
-        { name = "qbit",
-          parameters = []
-        }
-
-    resourceSpec' "resource qbit Party;"
-      `shouldParse` ResourceSpec
-        { name = "qbit",
-          parameters = ["Party"]
-        }
-
-    resourceSpec' "resource qbit Party Party;"
-      `shouldParse` ResourceSpec
-        { name = "qbit",
-          parameters = ["Party", "Party"]
-        }
-
+    resourceSpec' "resource qbit;" `shouldParse` ResourceSpec {name = "qbit", params = []}
+    resourceSpec' "resource qbit Party;" `shouldParse` ResourceSpec {name = "qbit", params = ["Party"]}
+    resourceSpec' "resource qbit Party Party;" `shouldParse` ResourceSpec {name = "qbit", params = ["Party", "Party"]}
     resourceSpec' `shouldFailOn` "resource resource;"
     resourceSpec' `shouldFailOn` "resource;"
 
@@ -288,11 +273,13 @@ spec = describe "parser" $ do
     let document' = parse document ""
 
     document' "" `shouldParse` []
-    document' "resource foo;" `shouldParse` [DeclareResource $ ResourceSpec {name = "foo", parameters = []}]
+
+    document' "resource foo;"
+      `shouldParse` [DeclareType $ DeclareResource $ ResourceSpec {name = "foo", params = []}]
 
     document' "parameter Party = Alice | Bob; resource qbit Party Party;"
-      `shouldParse` [ DeclareParam $ ParamSpec {name = "Party", values = TwoOrMore "Alice" "Bob" []},
-                      DeclareResource $ ResourceSpec {name = "qbit", parameters = ["Party", "Party"]}
+      `shouldParse` [ DeclareType $ DeclareParam $ ParamSpec {name = "Party", values = TwoOrMore "Alice" "Bob" []},
+                      DeclareType $ DeclareResource $ ResourceSpec {name = "qbit", params = ["Party", "Party"]}
                     ]
 
     document' `shouldFailOn` "resource foo"

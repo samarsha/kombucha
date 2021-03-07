@@ -11,7 +11,7 @@ import Test.Hspec
 spec :: Spec
 spec = describe "type inference" $ do
   it "infers expression types" $ do
-    let exprType' = exprType mempty
+    let exprType' = exprType emptyEnv
 
     exprType' ExprUnit `shouldBe` Right ([] :=> TypeResource ResourceUnit)
 
@@ -50,20 +50,24 @@ spec = describe "type inference" $ do
   it "infers expression types with environment" $ do
     let exprType' =
           exprType $
-            Map.fromList
-              [ ( "foo",
-                  ForAll Set.empty $
-                    [] :=> TypeInference (TypeResource ResourceUnit :|- TypeResource (ResourceAtom "atom" []))
-                ),
-                ( "bar",
-                  ForAll (Set.singleton "A") $
-                    [IsResource $ TypeVariable "A"] :=> TypeInference (TypeResource ResourceUnit :|- TypeVariable "A")
-                ),
-                ( "baz",
-                  ForAll (Set.singleton "B") $
-                    [IsResource $ TypeVariable "B"] :=> TypeInference (TypeVariable "B" :|- TypeVariable "B")
-                )
-              ]
+            Env
+              { types = Map.empty,
+                terms =
+                  Map.fromList
+                    [ ( "foo",
+                        ForAll Set.empty $
+                          [] :=> TypeInference (TypeResource ResourceUnit :|- TypeResource (ResourceAtom "atom" []))
+                      ),
+                      ( "bar",
+                        ForAll (Set.singleton "A") $
+                          [IsResource $ TypeVariable "A"] :=> TypeInference (TypeResource ResourceUnit :|- TypeVariable "A")
+                      ),
+                      ( "baz",
+                        ForAll (Set.singleton "B") $
+                          [IsResource $ TypeVariable "B"] :=> TypeInference (TypeVariable "B" :|- TypeVariable "B")
+                      )
+                    ]
+              }
 
     exprType' (ExprApply "foo" ExprUnit) `shouldBe` Right ([] :=> TypeResource (ResourceAtom "atom" []))
     exprType' (ExprApply "bar" ExprUnit) `shouldBe` Right ([IsResource $ TypeVariable "b"] :=> TypeVariable "b")
@@ -98,7 +102,7 @@ spec = describe "type inference" $ do
         )
 
   it "checks claims" $ do
-    let checkClaim' = checkClaim mempty
+    let checkClaim' = checkClaim emptyEnv
 
     checkClaim'
       Claim
@@ -106,7 +110,7 @@ spec = describe "type inference" $ do
           inference = TypeVariable "A" :|- TypeVariable "A",
           proof = PatternBind "x" `Proves` ExprVariable "x"
         }
-      `shouldBe` Right ()
+      `shouldBe` Right [IsResource $ TypeVariable "A"]
 
     checkClaim'
       Claim
@@ -141,3 +145,35 @@ spec = describe "type inference" $ do
           proof = PatternBind "x" `Proves` ExprUnit
         }
       `shouldBe` Left (UnusedVariables ["x"])
+
+    checkClaim'
+      Claim
+        { name = "identity_qbit",
+          inference =
+            TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+              :|- TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"]),
+          proof = PatternBind "x" `Proves` ExprVariable "x"
+        }
+      `shouldBe` Left (UnboundVariable "qbit")
+
+  it "checks claims with environment" $ do
+    let checkClaim' =
+          checkClaim
+            Env
+              { types =
+                  Map.fromList
+                    [ ("Party", DeclareParam ParamSpec {name = "Party", values = TwoOrMore "Alice" "Bob" []}),
+                      ("qbit", DeclareResource ResourceSpec {name = "qbit", params = ["Party", "Party"]})
+                    ],
+                terms = Map.empty
+              }
+
+    checkClaim'
+      Claim
+        { name = "identity_qbit",
+          inference =
+            TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+              :|- TypeResource (ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"]),
+          proof = PatternBind "x" `Proves` ExprVariable "x"
+        }
+      `shouldBe` Right [IsParam (TypeVariable "X") "Party", IsParam (TypeVariable "Y") "Party"]

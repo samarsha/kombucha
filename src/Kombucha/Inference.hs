@@ -1,8 +1,9 @@
 module Kombucha.Inference
-  ( Env,
+  ( Env (..),
     TypeError (..),
     checkClaim,
     checkDocument,
+    emptyEnv,
     exprType,
   )
 where
@@ -14,6 +15,7 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State (StateT, evalStateT)
 import qualified Control.Monad.Trans.State as State
 import Control.Monad.Trans.Writer
+import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -24,12 +26,15 @@ import qualified Kombucha.TwoOrMore as TwoOrMore
 newtype Infer a = Infer (WriterT [Constraint] (StateT InferState (Except TypeError)) a)
   deriving (Applicative, Functor, Monad)
 
-data InferState = InferState {count :: Int, env :: Env}
-
 data Constraint = Type :~ Type
   deriving (Show)
 
-type Env = Map Name Scheme
+data InferState = InferState {count :: Int, env :: Env}
+
+data Env = Env
+  { types :: Map Name TypeDeclaration,
+    terms :: Map Name Scheme
+  }
 
 data TypeError
   = AlreadyBound Name
@@ -91,29 +96,69 @@ instance Substitutable Resource where
   freeVars (ResourceAtom _ params) = freeVars params
   freeVars (ResourceTuple resources) = freeVars $ TwoOrMore.toList resources
 
+-- * Typing environment
+
+emptyEnv :: Env
+emptyEnv = Env {types = Map.empty, terms = Map.empty}
+
+insertType :: Name -> TypeDeclaration -> Env -> Env
+insertType name declaration env = env {types = Map.insert name declaration $ types env}
+
+insertTerm :: Name -> Scheme -> Env -> Env
+insertTerm name scheme env = env {terms = Map.insert name scheme $ terms env}
+
+deleteTerm :: Name -> Env -> Env
+deleteTerm name env = env {terms = Map.delete name $ terms env}
+
 -- * Type checking and inference
 
 checkDocument :: Document -> Either TypeError ()
-checkDocument = flip foldM_ Map.empty $ \env declaration ->
+checkDocument = flip foldM_ emptyEnv $ \env declaration ->
   case declaration of
-    DeclareAxiom Axiom {name, inference} ->
-      Right $ Map.insert name (inferenceScheme inference) env
+    DeclareType param@(DeclareParam ParamSpec {name}) ->
+      return $ insertType name param env
+    DeclareType resource@(DeclareResource ResourceSpec {name}) ->
+      return $ insertType name resource env
+    DeclareAxiom Axiom {name, inference} -> do
+      scheme <- inferenceScheme env inference
+      return $ insertTerm name scheme env
     DeclareClaim claim@Claim {name, inference} -> do
-      checkClaim env claim
-      Right $ Map.insert name (inferenceScheme inference) env
-    _ -> error "Unsupported declaration."
+      -- TODO: Check predicates.
+      void $ checkClaim env claim
+      scheme <- inferenceScheme env inference
+      return $ insertTerm name scheme env
 
-inferenceScheme :: Inference -> Scheme
-inferenceScheme inference = ForAll vars $ predicates :=> TypeInference inference
-  where
-    vars = freeVars inference
-    predicates = map (IsResource . TypeVariable) $ Set.toList vars
+inferenceScheme :: Env -> Inference -> Either TypeError Scheme
+inferenceScheme env inference = do
+  predicates <- typePredicates env $ TypeInference inference
+  return $ ForAll (freeVars inference) $ predicates :=> TypeInference inference
 
-checkClaim :: Env -> Claim -> Either TypeError ()
+typePredicates :: Env -> Type -> Either TypeError [Predicate]
+typePredicates env type' = case type' of
+  TypeInference (lhs :|- rhs) -> do
+    lhsPreds <- typePredicates env lhs
+    rhsPreds <- typePredicates env rhs
+    return $ lhsPreds ++ rhsPreds
+  TypeResource ResourceUnit -> return []
+  TypeResource (ResourceAtom name givenParams) ->
+    case Map.lookup name $ types env of
+      Just (DeclareResource ResourceSpec {params = expectedParams}) ->
+        return $ zipWith IsParam givenParams expectedParams
+      _ -> Left $ UnboundVariable name
+  TypeResource (ResourceTuple resources) -> do
+    predicates <- mapM (typePredicates env) $ TwoOrMore.toList resources
+    return $ concat predicates
+  TypeParam _ -> return []
+  TypeVariable _ -> return [IsResource type']
+
+checkClaim :: Env -> Claim -> Either TypeError [Predicate]
 checkClaim env claim@Claim {inference} = do
-  -- TODO: Check predicates.
-  (_, constraints) <- runInfer env (inferClaim claim)
-  void $ runSolve (freeVars inference) constraints
+  (proofPreds :=> _, constraints) <- runInfer env (inferClaim claim)
+  inferencePreds <- typePredicates env $ TypeInference inference
+  let predicates = nub $ proofPreds ++ inferencePreds
+
+  subst <- runSolve (freeVars inference) constraints
+  return $ apply subst predicates
 
 exprType :: Env -> Expr -> Either TypeError (Qualified Type)
 exprType env expr = do
@@ -133,17 +178,15 @@ inferClaim Claim {inference = lhs :|- rhs, proof = input `Proves` output} =
     constrain $ lhs :~ inputType
     constrain $ rhs :~ outputType
 
-    let vars = freeVars $ lhs :|- rhs
-    let varPreds = map (IsResource . TypeVariable) $ Set.toList vars
-    let predicates = varPreds ++ inputPreds ++ outputPreds
+    let predicates = inputPreds ++ outputPreds
     return $ predicates :=> TypeInference (inputType :|- outputType)
 
 inferExpr :: Expr -> Infer (Qualified Type)
 inferExpr ExprUnit = return $ [] :=> TypeResource ResourceUnit
 inferExpr (ExprVariable name) = do
-  type' <- lookupEnv name
+  type' <- lookupTerm name
   state <- getState
-  putState state {env = Map.delete name $ env state}
+  putState state {env = deleteTerm name $ env state}
   return type'
 inferExpr (ExprTuple exprs) = do
   (predicates, types) <- extractPredicates <$> mapM inferExpr exprs
@@ -154,7 +197,7 @@ inferExpr (ExprLet binding value) = do
   constrain $ lhs :~ rhs
   return $ (lhsPreds ++ rhsPreds) :=> TypeResource ResourceUnit
 inferExpr (ExprApply name arg) = do
-  namePreds :=> nameType <- lookupEnv name
+  namePreds :=> nameType <- lookupTerm name
   argPreds :=> argType <- inferExpr arg
   resultType <- fresh
   constrain $ nameType :~ TypeInference (argType :|- resultType)
@@ -167,12 +210,12 @@ inferPattern :: Pattern -> Infer (Qualified Type)
 inferPattern PatternUnit = return $ [] :=> TypeResource ResourceUnit
 inferPattern (PatternBind name) = do
   before <- getState
-  when (name `Map.member` env before) $ inferError $ AlreadyBound name
+  when (name `Map.member` terms (env before)) $ inferError $ AlreadyBound name
   var <- fresh
   let var' = [] :=> var
 
   modifyState $ \state ->
-    state {env = Map.insert name (ForAll Set.empty var') $ env state}
+    state {env = insertTerm name (ForAll Set.empty var') $ env state}
 
   return var'
 inferPattern (PatternTuple patterns) = do
@@ -193,7 +236,7 @@ checkEnv infer = do
   result <- infer
   after <- getState
 
-  let unusedVars = env after `Map.difference` env before
+  let unusedVars = terms (env after) `Map.difference` terms (env before)
   unless (null unusedVars) $ inferError $ UnusedVariables $ Map.keys unusedVars
 
   return result
@@ -215,10 +258,10 @@ instantiate (ForAll vars type') = do
   where
     varList = Set.toList vars
 
-lookupEnv :: Name -> Infer (Qualified Type)
-lookupEnv name = do
+lookupTerm :: Name -> Infer (Qualified Type)
+lookupTerm name = do
   InferState {env} <- getState
-  case Map.lookup name env of
+  case Map.lookup name $ terms env of
     Just scheme -> instantiate scheme
     Nothing -> inferError $ UnboundVariable name
 

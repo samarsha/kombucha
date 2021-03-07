@@ -11,10 +11,14 @@ type Document = [Declaration]
 -- * Declarations
 
 data Declaration
-  = DeclareParam ParamSpec
-  | DeclareResource ResourceSpec
+  = DeclareType TypeDeclaration
   | DeclareAxiom Axiom
   | DeclareClaim Claim
+  deriving (Eq, Show)
+
+data TypeDeclaration
+  = DeclareParam ParamSpec
+  | DeclareResource ResourceSpec
   deriving (Eq, Show)
 
 data ParamSpec = ParamSpec
@@ -25,7 +29,7 @@ data ParamSpec = ParamSpec
 
 data ResourceSpec = ResourceSpec
   { name :: Name,
-    parameters :: [Name]
+    params :: [Name]
   }
   deriving (Eq, Show)
 
