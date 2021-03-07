@@ -1,4 +1,6 @@
 module Main where
 
+import qualified Kombucha.App as App
+
 main :: IO ()
-main = putStrLn "someFunc"
+main = App.main

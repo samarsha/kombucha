@@ -5,6 +5,7 @@ dependencies:
 - base
 - containers
 - parsec
+- pretty-simple
 - transformers
 
 library:
