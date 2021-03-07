@@ -165,7 +165,10 @@ spec = describe "type inference" $ do
                     [ ("Party", DeclareParam ParamSpec {name = "Party", values = TwoOrMore "Alice" "Bob" []}),
                       ("qbit", DeclareResource ResourceSpec {name = "qbit", params = ["Party", "Party"]})
                     ],
-                terms = Map.empty
+                terms =
+                  Map.singleton "destroy" $
+                    ForAll (Set.singleton "A") $
+                      [] :=> TypeInference (TypeVariable "A" :|- TypeResource ResourceUnit)
               }
 
     checkClaim'
@@ -177,3 +180,23 @@ spec = describe "type inference" $ do
           proof = PatternBind "x" `Proves` ExprVariable "x"
         }
       `shouldBe` Right [IsParam (TypeVariable "X") "Party", IsParam (TypeVariable "Y") "Party"]
+
+    checkClaim'
+      Claim
+        { name = "conflicting_predicates",
+          inference =
+            TypeResource
+              ( ResourceTuple $
+                  TwoOrMore
+                    (TypeResource $ ResourceAtom "qbit" [TypeVariable "X", TypeVariable "Y"])
+                    (TypeVariable "X")
+                    []
+              )
+              :|- TypeResource ResourceUnit,
+          proof = PatternBind "x" `Proves` ExprApply "destroy" (ExprVariable "x")
+        }
+      `shouldBe` Right
+        [ IsParam (TypeVariable "X") "Party",
+          IsParam (TypeVariable "Y") "Party",
+          IsResource $ TypeVariable "X"
+        ]
