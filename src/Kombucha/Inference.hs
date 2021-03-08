@@ -37,6 +37,7 @@ data Env = Env
   { types :: Map Name TypeDeclaration,
     terms :: Map Name Scheme
   }
+  deriving (Eq, Show)
 
 instance PrettySyntax Env where
   prettySyntax env =
