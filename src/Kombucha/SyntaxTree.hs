@@ -3,6 +3,7 @@ module Kombucha.SyntaxTree where
 import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Kombucha.Pretty
 import Kombucha.TwoOrMore (TwoOrMore)
 import qualified Kombucha.TwoOrMore as TwoOrMore
 import Prettyprinter
@@ -24,9 +25,9 @@ data TypeDeclaration
   | DeclareResource ResourceSpec
   deriving (Eq, Show)
 
-instance Pretty TypeDeclaration where
-  pretty (DeclareParam param) = pretty param
-  pretty (DeclareResource resource) = pretty resource
+instance PrettySyntax TypeDeclaration where
+  prettySyntax (DeclareParam param) = prettySyntax param
+  prettySyntax (DeclareResource resource) = prettySyntax resource
 
 data ParamSpec = ParamSpec
   { name :: Name,
@@ -34,12 +35,12 @@ data ParamSpec = ParamSpec
   }
   deriving (Eq, Show)
 
-instance Pretty ParamSpec where
-  pretty ParamSpec {name, values} =
-    "parameter"
-      <+> pretty name
-      <+> "="
-      <+> hcat (punctuate " | " $ map pretty $ TwoOrMore.toList values)
+instance PrettySyntax ParamSpec where
+  prettySyntax ParamSpec {name, values} =
+    annotate SyntaxKeyword "parameter"
+      <+> annotate SyntaxParam (pretty name)
+      <+> annotate SyntaxOperator "="
+      <+> hcat (punctuate (annotate SyntaxOperator " | ") $ map pretty $ TwoOrMore.toList values)
 
 data ResourceSpec = ResourceSpec
   { name :: Name,
@@ -47,8 +48,11 @@ data ResourceSpec = ResourceSpec
   }
   deriving (Eq, Show)
 
-instance Pretty ResourceSpec where
-  pretty ResourceSpec {name, params} = "resource" <+> pretty name <+> hsep (map pretty params)
+instance PrettySyntax ResourceSpec where
+  prettySyntax ResourceSpec {name, params} =
+    annotate SyntaxKeyword "resource"
+      <+> annotate SyntaxType (pretty name)
+      <+> hsep (map (annotate SyntaxParam . pretty) params)
 
 data Axiom = Axiom
   { name :: Name,
@@ -94,17 +98,17 @@ data Type
   | TypeVariable Name
   deriving (Eq, Show)
 
-instance Pretty Type where
-  pretty (TypeInference inference) = pretty inference
-  pretty (TypeResource resource) = pretty resource
-  pretty (TypeParam param) = pretty param
-  pretty (TypeVariable var) = pretty var
+instance PrettySyntax Type where
+  prettySyntax (TypeInference inference) = prettySyntax inference
+  prettySyntax (TypeResource resource) = prettySyntax resource
+  prettySyntax (TypeParam param) = pretty param
+  prettySyntax (TypeVariable var) = annotate SyntaxType $ pretty var
 
 data Inference = Type :|- Type
   deriving (Eq, Show)
 
-instance Pretty Inference where
-  pretty (type1 :|- type2) = pretty type1 <+> "|-" <+> pretty type2
+instance PrettySyntax Inference where
+  prettySyntax (type1 :|- type2) = prettySyntax type1 <+> annotate SyntaxOperator "|-" <+> prettySyntax type2
 
 data Resource
   = ResourceUnit
@@ -112,32 +116,38 @@ data Resource
   | ResourceTuple (TwoOrMore Type)
   deriving (Eq, Show)
 
-instance Pretty Resource where
-  pretty ResourceUnit = "0"
-  pretty (ResourceAtom name params) = pretty name <+> hsep (map pretty params)
-  pretty (ResourceTuple types) = encloseSep lparen rparen " + " $ map pretty $ TwoOrMore.toList types
+instance PrettySyntax Resource where
+  prettySyntax ResourceUnit = annotate SyntaxType "0"
+  prettySyntax (ResourceAtom name params) =
+    annotate SyntaxType (pretty name) <+> hsep (map prettySyntax params)
+  prettySyntax (ResourceTuple types) =
+    encloseSep lparen rparen (annotate SyntaxOperator " + ") $
+      map prettySyntax $ TwoOrMore.toList types
 
 data Qualified t = [Predicate] :=> t
   deriving (Eq, Show)
 
-instance Pretty t => Pretty (Qualified t) where
-  pretty (predicates :=> type') =
-    "such that"
-      <+> hcat (punctuate (comma <> space) $ map pretty predicates)
+instance PrettySyntax t => PrettySyntax (Qualified t) where
+  prettySyntax (predicates :=> type') =
+    annotate SyntaxKeyword "such that"
+      <+> hcat (punctuate (comma <> space) $ map prettySyntax predicates)
       <> line
-      <> pretty type'
+      <> prettySyntax type'
 
 data Predicate
   = IsResource Type
   | IsParam Type Name
   deriving (Eq, Show)
 
-instance Pretty Predicate where
-  pretty (IsResource type') = pretty type' <+> "is a resource"
-  pretty (IsParam type' param) = pretty type' <+> "is a" <+> pretty param
+instance PrettySyntax Predicate where
+  prettySyntax (IsResource type') = prettySyntax type' <+> "is a resource"
+  prettySyntax (IsParam type' param) = prettySyntax type' <+> "is a" <+> annotate SyntaxParam (pretty param)
 
 data Scheme = ForAll (Set Name) (Qualified Type)
   deriving (Eq, Show)
 
-instance Pretty Scheme where
-  pretty (ForAll vars type') = "for all " <> hsep (map pretty $ Set.toList vars) <> "," <+> pretty type'
+instance PrettySyntax Scheme where
+  prettySyntax (ForAll vars type') =
+    annotate SyntaxKeyword "for all "
+      <> hsep (map (annotate SyntaxType . pretty) $ Set.toList vars)
+      <> "," <+> prettySyntax type'

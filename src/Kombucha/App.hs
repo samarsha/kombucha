@@ -2,6 +2,7 @@ module Kombucha.App (main) where
 
 import qualified Data.Map as Map
 import Kombucha.Inference
+import Kombucha.Pretty
 import Kombucha.Verifier
 import Prettyprinter
 import Prettyprinter.Render.Terminal
@@ -28,10 +29,18 @@ main = do
                   <+> pretty (Map.size $ terms env)
                   <+> "inferences verified."
 
-          render $ pretty env <> line <> line <> annotate (color Green) summary <> line
+          renderIO stdout $ reAnnotateS colorize (layout $ prettySyntax env <> line <> line)
+          renderIO stdout $ layout (annotate (color Green) summary <> line)
     _ -> do
       hPutStrLn stderr "Usage: kombucha <filename>"
       exitFailure
 
-render :: Doc AnsiStyle -> IO ()
-render = renderIO stdout . layoutPretty (defaultLayoutOptions {layoutPageWidth = Unbounded})
+layout :: Doc ann -> SimpleDocStream ann
+layout = layoutPretty $ defaultLayoutOptions {layoutPageWidth = Unbounded}
+
+colorize :: Syntax -> AnsiStyle
+colorize SyntaxClaim = bold <> color White
+colorize SyntaxKeyword = color Blue
+colorize SyntaxOperator = color Yellow
+colorize SyntaxParam = color Cyan
+colorize SyntaxType = color Magenta

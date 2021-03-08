@@ -20,6 +20,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Kombucha.Pretty
 import Kombucha.SyntaxTree
 import qualified Kombucha.TwoOrMore as TwoOrMore
 import Prettyprinter
@@ -37,15 +38,17 @@ data Env = Env
     terms :: Map Name Scheme
   }
 
-instance Pretty Env where
-  pretty env =
-    blankLineSep (map (pretty . snd) $ Map.toList $ types env)
+instance PrettySyntax Env where
+  prettySyntax env =
+    blankLineSep (map (prettySyntax . snd) $ Map.toList $ types env)
       <> line
       <> line
       <> blankLineSep (map prettyTerm $ Map.toList $ terms env)
     where
       blankLineSep = concatWith $ \x y -> x <> line <> line <> y
-      prettyTerm (name, scheme) = pretty name <> ":" <> nest 4 (line <> pretty scheme)
+
+      prettyTerm (name, scheme) =
+        annotate SyntaxClaim (pretty name) <> ":" <> nest 4 (line <> prettySyntax scheme)
 
 data TypeError
   = AlreadyBound Name
