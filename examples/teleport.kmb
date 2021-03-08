@@ -1,0 +1,41 @@
+parameter Type = Quantum | Classical;
+parameter Party = Alice | Bob;
+parameter Time = Past | Present;
+
+resource bit Type Party Time;
+
+axiom X_gate: bit Quantum X T |- bit Quantum X T;
+axiom Z_gate: bit Quantum X T |- bit Quantum X T;
+axiom H_gate: bit Quantum X T |- bit Quantum X T;
+
+axiom CX_gate: bit S X T + bit Quantum X T |- bit S X T + bit Quantum X T;
+axiom CZ_gate: bit S X T + bit Quantum X T |- bit S X T + bit Quantum X T;
+axiom CH_gate: bit S X T + bit Quantum X T |- bit S X T + bit Quantum X T;
+
+axiom measure: bit Quantum X T |- bit Classical X T;
+axiom destroy_cbit: bit Classical X Y |- 0;
+axiom to_present: bit S X Past |- bit S X Present;
+
+axiom share_ebit: 0 |- bit Quantum X Past + bit Quantum Y Past;
+axiom send_cbit: bit Classical X T |- bit Classical Y T;
+
+claim teleport: bit Quantum X Present |- bit Quantum Y Present;
+proof q1 -> {
+  let q2 + q3 = share_ebit 0;
+  let q2 = to_present q2;
+  let q3 = to_present q3;
+
+  let q1 + q2 = CX_gate (q1 + q2);
+  let q1 = X_gate q1;
+  let c1 = measure q1;
+  let c2 = measure q2;
+
+  let c1 = send_cbit c1;
+  let c1 + q3 = CX_gate (c1 + q3);
+  destroy_cbit c1;
+  let c2 = send_cbit c2;
+  let c2 + q3 = CZ_gate (c2 + q3);
+  destroy_cbit c2;
+
+  q3
+};

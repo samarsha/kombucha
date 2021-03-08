@@ -1,0 +1,49 @@
+parameter Party = Alice | Bob;
+
+resource cbit Party Party;
+resource qbit Party Party;
+resource cobit Party Party;
+resource ebit Party Party;
+resource CNOT Party Party;
+resource SWAP Party Party;
+
+axiom qbit_to_ebit: qbit X Y |- ebit X Y;
+axiom qbit_to_cbit: qbit X Y |- cbit X Y;
+axiom flip_ebit: ebit X Y |- ebit Y X;
+axiom flip_CNOT: CNOT X Y |- CNOT Y X;
+
+axiom theorem_1a: 2 cobit X Y + ebit X Y |- qbit X Y + 2 ebit X Y;
+axiom theorem_1b: qbit X Y + 2 ebit X Y |- 2 cobit X Y + ebit X Y;
+
+axiom theorem_2a: qbit X Y + qbit Y X |- SWAP X Y;
+axiom theorem_2b: SWAP X Y |- qbit X Y + qbit Y X;
+
+axiom problem_a: cbit X Y + cbit Y X + ebit X Y |- CNOT X Y;
+axiom problem_b: cobit X Y + cobit Y X |- CNOT X Y + ebit X Y;
+axiom problem_c: CNOT X Y + ebit X Y |- cbit X Y + cbit Y X;
+axiom problem_d: CNOT X Y + ebit X Y |- cobit X Y + cobit Y X;
+
+claim problem_e1: 2 CNOT X Y + 3 ebit X Y |- SWAP X Y + 3 ebit X Y;
+proof (cn1 + cn2) + (e1 + e2 + e3) -> {
+  let c1 + c2 = problem_d (cn1 + e1);
+  let c3 + c4 = problem_d (cn2 + e2);
+  let q1 + (e4 + e5) = theorem_1a ((c1 + c3) + e3);
+  let q2 + (e6 + e7) = theorem_1a ((c2 + c4) + flip_ebit e4);
+  theorem_2a (q1 + q2) + (e5 + flip_ebit e6 + flip_ebit e7)
+};
+
+claim problem_e2: SWAP X Y + 3 ebit X Y |- 2 CNOT X Y + 3 ebit X Y;
+proof sw + (e1 + e2 + e3) -> {
+  let q1 + q2 = theorem_2b sw;
+  let (c1 + c2) + e4 = theorem_1b (q1 + (e1 + e2));
+  let (c3 + c4) + e5 = theorem_1b (q2 + (flip_ebit e3 + flip_ebit e4));
+  let cn1 + e6 = problem_b (c1 + c3);
+  let cn2 + e7 = problem_b (c2 + c4);
+  (cn1 + cn2) + (flip_ebit e5 + e6 + e7)
+};
+
+claim flip_SWAP: SWAP X Y |- SWAP Y X;
+proof sw -> {
+  let q1 + q2 = theorem_2b sw;
+  theorem_2a (q2 + q1)
+};

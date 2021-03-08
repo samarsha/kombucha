@@ -1,0 +1,41 @@
+parameter Party = Alice | Bob;
+
+resource qbit Party Party;
+resource ebit Party Party;
+
+axiom qbit_to_ebit: qbit X Y |- ebit X Y;
+axiom flip_ebit: ebit X Y |- ebit Y X;
+
+claim identity_qbit: qbit X Y |- qbit X Y;
+proof q -> q;
+
+claim associativity_qbit: (qbit X Y + qbit X Y) + qbit X Y |- qbit X Y + (qbit X Y + qbit X Y);
+proof (a + b) + c -> a + (b + c);
+
+claim commutative_qbit: qbit X Y + qbit Y X |- qbit Y X + qbit X Y;
+proof a + b -> {
+  let result = b + a;
+  result
+};
+
+claim append_arrays_qbit: 2 qbit X Y + 3 qbit X Y |- 5 qbit X Y;
+proof (a1 + a2) + (b1 + b2 + b3) -> a1 + a2 + b1 + b2 + b3;
+
+claim append_arrays: 2 A + 3 A |- 5 A;
+proof (a1 + a2) + (b1 + b2 + b3) -> a1 + a2 + b1 + b2 + b3;
+
+claim identity_qbit_2: qbit X Y |- qbit X Y;
+proof q -> {
+  let q2 = identity_qbit q;
+  q2
+};
+
+claim identity_qbit_3: qbit X Y |- qbit X Y;
+proof q -> {
+  let q2 = {
+    let q3 = identity_qbit q;
+    let q4 = identity_qbit q3;
+    identity_qbit q4
+  };
+  q2
+};
