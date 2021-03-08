@@ -6,6 +6,8 @@ dependencies:
 - containers
 - parsec
 - pretty-simple
+- prettyprinter
+- prettyprinter-ansi-terminal
 - transformers
 
 library:
@@ -34,3 +36,4 @@ default-extensions:
 - DuplicateRecordFields
 - GeneralizedNewtypeDeriving
 - NamedFieldPuns
+- OverloadedStrings

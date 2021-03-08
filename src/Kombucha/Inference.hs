@@ -22,6 +22,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Kombucha.SyntaxTree
 import qualified Kombucha.TwoOrMore as TwoOrMore
+import Prettyprinter
 
 newtype Infer a = Infer (WriterT [Constraint] (StateT InferState (Except TypeError)) a)
   deriving (Applicative, Functor, Monad)
@@ -35,6 +36,16 @@ data Env = Env
   { types :: Map Name TypeDeclaration,
     terms :: Map Name Scheme
   }
+
+instance Pretty Env where
+  pretty env =
+    blankLineSep (map (pretty . snd) $ Map.toList $ types env)
+      <> line
+      <> line
+      <> blankLineSep (map prettyTerm $ Map.toList $ terms env)
+    where
+      blankLineSep = concatWith $ \x y -> x <> line <> line <> y
+      prettyTerm (name, scheme) = pretty name <> ":" <> nest 4 (line <> pretty scheme)
 
 data TypeError
   = AlreadyBound Name
@@ -112,24 +123,23 @@ deleteTerm name env = env {terms = Map.delete name $ terms env}
 
 -- * Type checking and inference
 
-checkDocument :: Document -> Either TypeError (Map Name [Predicate])
-checkDocument document = snd <$> foldM foldDeclarations (emptyEnv, Map.empty) document
+checkDocument :: Document -> Either TypeError Env
+checkDocument = foldM foldDeclarations emptyEnv
   where
-    foldDeclarations (env, predicates) declaration =
+    foldDeclarations env declaration =
       case declaration of
         DeclareType param@(DeclareParam ParamSpec {name}) ->
-          return (insertType name param env, predicates)
+          return $ insertType name param env
         DeclareType resource@(DeclareResource ResourceSpec {name}) ->
-          return (insertType name resource env, predicates)
+          return $ insertType name resource env
         DeclareAxiom Axiom {name, inference} -> do
-          scheme@(ForAll _ (inferencePreds :=> _)) <- inferenceScheme env inference
-          let predicates' = Map.insert name inferencePreds predicates
-          return (insertTerm name scheme env, predicates')
+          scheme <- inferenceScheme env inference
+          return $ insertTerm name scheme env
         DeclareClaim claim@Claim {name, inference} -> do
           claimPreds <- checkClaim env claim
-          scheme@(ForAll _ (inferencePreds :=> _)) <- inferenceScheme env inference
-          let predicates' = Map.insert name (nub $ claimPreds ++ inferencePreds) predicates
-          return (insertTerm name scheme env, predicates')
+          ForAll vars (inferencePreds :=> type') <- inferenceScheme env inference
+          let scheme' = ForAll vars $ nub (claimPreds ++ inferencePreds) :=> type'
+          return $ insertTerm name scheme' env
 
 inferenceScheme :: Env -> Inference -> Either TypeError Scheme
 inferenceScheme env inference = do
