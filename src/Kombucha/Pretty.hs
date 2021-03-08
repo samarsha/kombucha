@@ -6,7 +6,6 @@ data Syntax
   = SyntaxClaim
   | SyntaxKeyword
   | SyntaxOperator
-  | SyntaxParam
   | SyntaxType
 
 class PrettySyntax a where

@@ -38,9 +38,12 @@ data ParamSpec = ParamSpec
 instance PrettySyntax ParamSpec where
   prettySyntax ParamSpec {name, values} =
     annotate SyntaxKeyword "parameter"
-      <+> annotate SyntaxParam (pretty name)
+      <+> annotate SyntaxType (pretty name)
       <+> annotate SyntaxOperator "="
-      <+> hcat (punctuate (annotate SyntaxOperator " | ") $ map pretty $ TwoOrMore.toList values)
+      <+> hcat
+        ( punctuate (annotate SyntaxOperator " | ") $
+            map (annotate SyntaxType . pretty) $ TwoOrMore.toList values
+        )
 
 data ResourceSpec = ResourceSpec
   { name :: Name,
@@ -52,7 +55,7 @@ instance PrettySyntax ResourceSpec where
   prettySyntax ResourceSpec {name, params} =
     annotate SyntaxKeyword "resource"
       <+> annotate SyntaxType (pretty name)
-      <+> hsep (map (annotate SyntaxParam . pretty) params)
+      <+> hsep (map (annotate SyntaxType . pretty) params)
 
 data Axiom = Axiom
   { name :: Name,
@@ -101,7 +104,7 @@ data Type
 instance PrettySyntax Type where
   prettySyntax (TypeInference inference) = prettySyntax inference
   prettySyntax (TypeResource resource) = prettySyntax resource
-  prettySyntax (TypeParam param) = pretty param
+  prettySyntax (TypeParam param) = annotate SyntaxType $ pretty param
   prettySyntax (TypeVariable var) = annotate SyntaxType $ pretty var
 
 data Inference = Type :|- Type
@@ -129,7 +132,7 @@ data Qualified t = [Predicate] :=> t
 
 instance PrettySyntax t => PrettySyntax (Qualified t) where
   prettySyntax (predicates :=> type') =
-    annotate SyntaxKeyword "such that"
+    "such that"
       <+> hcat (punctuate (comma <> space) $ map prettySyntax predicates)
       <> line
       <> prettySyntax type'
@@ -141,13 +144,13 @@ data Predicate
 
 instance PrettySyntax Predicate where
   prettySyntax (IsResource type') = prettySyntax type' <+> "is a resource"
-  prettySyntax (IsParam type' param) = prettySyntax type' <+> "is a" <+> annotate SyntaxParam (pretty param)
+  prettySyntax (IsParam type' param) = prettySyntax type' <+> "is a" <+> annotate SyntaxType (pretty param)
 
 data Scheme = ForAll (Set Name) (Qualified Type)
   deriving (Eq, Show)
 
 instance PrettySyntax Scheme where
   prettySyntax (ForAll vars type') =
-    annotate SyntaxKeyword "for all "
+    "for all "
       <> hsep (map (annotate SyntaxType . pretty) $ Set.toList vars)
       <> "," <+> prettySyntax type'

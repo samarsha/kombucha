@@ -41,6 +41,5 @@ layout = layoutPretty $ defaultLayoutOptions {layoutPageWidth = Unbounded}
 colorize :: Syntax -> AnsiStyle
 colorize SyntaxClaim = bold <> color White
 colorize SyntaxKeyword = color Blue
-colorize SyntaxOperator = color Yellow
-colorize SyntaxParam = color Cyan
-colorize SyntaxType = color Magenta
+colorize SyntaxOperator = color Red
+colorize SyntaxType = color Yellow
