@@ -14,9 +14,11 @@ import Text.Pretty.Simple
 main :: IO ()
 main = do
   args <- getArgs
+
   case args of
     [filename] -> do
       text <- readFile filename
+
       case verify text of
         Left err -> do
           pHPrint stderr err
@@ -29,8 +31,10 @@ main = do
                   <+> pretty (Map.size $ terms env)
                   <+> "inferences verified."
 
-          renderIO stdout $ reAnnotateS colorize (layout $ prettySyntax env <> line <> line)
-          renderIO stdout $ layout (annotate (color Green) summary <> line)
+          renderIO stdout $ reAnnotateS colorize $ layout $ prettySyntax env
+          putStr "\n\n"
+          renderIO stdout $ layout $ annotate (color Green) summary
+          putStr "\n"
     _ -> do
       hPutStrLn stderr "Usage: kombucha <filename>"
       exitFailure
