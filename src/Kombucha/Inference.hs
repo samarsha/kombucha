@@ -142,13 +142,15 @@ checkDocument = foldM foldDeclarations emptyEnv
         DeclareClaim claim@Claim {name, inference} -> do
           claimPreds <- checkClaim env claim
           ForAll vars (inferencePreds :=> type') <- inferenceScheme env inference
-          let scheme' = ForAll vars $ nub (claimPreds ++ inferencePreds) :=> type'
-          return $ insertTerm name scheme' env
+
+          let predicates = normalizePredicates env $ claimPreds ++ inferencePreds
+          let scheme = ForAll vars $ predicates :=> type'
+          return $ insertTerm name scheme env
 
 inferenceScheme :: Env -> Inference -> Either TypeError Scheme
 inferenceScheme env inference = do
-  predicates <- nub <$> typePredicates env (TypeInference inference)
-  return $ ForAll (freeVars inference) $ predicates :=> TypeInference inference
+  predicates <- normalizePredicates env <$> typePredicates env (TypeInference inference)
+  return $ ForAll (Set.toList $ freeVars inference) $ predicates :=> TypeInference inference
 
 typePredicates :: Env -> Type -> Either TypeError [Predicate]
 typePredicates env type' = case type' of
@@ -169,11 +171,28 @@ typePredicates env type' = case type' of
   TypeParam _ -> return []
   TypeVariable _ -> return [IsResource type']
 
+normalizePredicates :: Env -> [Predicate] -> [Predicate]
+normalizePredicates env = filter (\predicate -> trivial env predicate /= Just True) . nub
+
+trivial :: Env -> Predicate -> Maybe Bool
+trivial env predicate = case predicate of
+  IsResource (TypeInference _) -> Just False
+  IsResource (TypeResource _) -> Just True
+  IsResource (TypeParam _) -> Just False
+  IsResource (TypeVariable _) -> Nothing
+  IsParam (TypeInference _) _ -> Just False
+  IsParam (TypeResource _) _ -> Just False
+  IsParam (TypeParam value) param ->
+    case Map.lookup param $ types env of
+      Just (DeclareParam ParamSpec {values}) -> Just $ value `elem` values
+      _ -> Just False
+  IsParam (TypeVariable _) _ -> Nothing
+
 checkClaim :: Env -> Claim -> Either TypeError [Predicate]
 checkClaim env claim@Claim {inference} = do
   (proofPreds :=> _, constraints) <- runInfer env (inferClaim claim)
   inferencePreds <- typePredicates env $ TypeInference inference
-  let predicates = nub $ proofPreds ++ inferencePreds
+  let predicates = normalizePredicates env $ proofPreds ++ inferencePreds
 
   subst <- runSolve (freeVars inference) constraints
   return $ apply subst predicates
@@ -229,11 +248,10 @@ inferPattern PatternUnit = return $ [] :=> TypeResource ResourceUnit
 inferPattern (PatternBind name) = do
   before <- getState
   when (name `Map.member` terms (env before)) $ inferError $ AlreadyBound name
+
   var <- fresh
   let var' = [] :=> var
-
-  modifyState $ \state ->
-    state {env = insertTerm name (ForAll Set.empty var') $ env state}
+  modifyState $ \state -> state {env = insertTerm name (ForAll [] var') $ env state}
 
   return var'
 inferPattern (PatternTuple patterns) = do
@@ -268,11 +286,9 @@ fresh = do
 
 instantiate :: Scheme -> Infer (Qualified Type)
 instantiate (ForAll vars type') = do
-  varList' <- forM varList $ const fresh
-  let subst = Map.fromList $ zip varList varList'
+  vars' <- forM vars $ const fresh
+  let subst = Map.fromList $ zip vars vars'
   return $ apply subst type'
-  where
-    varList = Set.toList vars
 
 lookupTerm :: Name -> Infer (Qualified Type)
 lookupTerm name = do

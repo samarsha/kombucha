@@ -2,7 +2,6 @@ module Kombucha.Test.InferenceSpec where
 
 import Data.List.NonEmpty
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Kombucha.Inference
 import Kombucha.SyntaxTree
 import Kombucha.TwoOrMore
@@ -55,15 +54,15 @@ spec = describe "type inference" $ do
                 terms =
                   Map.fromList
                     [ ( "foo",
-                        ForAll Set.empty $
+                        ForAll [] $
                           [] :=> TypeInference (TypeResource ResourceUnit :|- TypeResource (ResourceAtom "atom" []))
                       ),
                       ( "bar",
-                        ForAll (Set.singleton "A") $
+                        ForAll ["A"] $
                           [IsResource $ TypeVariable "A"] :=> TypeInference (TypeResource ResourceUnit :|- TypeVariable "A")
                       ),
                       ( "baz",
-                        ForAll (Set.singleton "B") $
+                        ForAll ["B"] $
                           [IsResource $ TypeVariable "B"] :=> TypeInference (TypeVariable "B" :|- TypeVariable "B")
                       )
                     ]
@@ -167,8 +166,7 @@ spec = describe "type inference" $ do
                     ],
                 terms =
                   Map.singleton "destroy" $
-                    ForAll (Set.singleton "A") $
-                      [] :=> TypeInference (TypeVariable "A" :|- TypeResource ResourceUnit)
+                    ForAll ["A"] $ [] :=> TypeInference (TypeVariable "A" :|- TypeResource ResourceUnit)
               }
 
     checkClaim'

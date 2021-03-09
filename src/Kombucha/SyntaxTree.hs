@@ -1,8 +1,6 @@
 module Kombucha.SyntaxTree where
 
 import Data.List.NonEmpty (NonEmpty)
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Kombucha.Pretty
 import Kombucha.TwoOrMore (TwoOrMore)
 import qualified Kombucha.TwoOrMore as TwoOrMore
@@ -146,11 +144,11 @@ instance PrettySyntax Predicate where
   prettySyntax (IsResource type') = prettySyntax type' <+> "is a resource"
   prettySyntax (IsParam type' param) = prettySyntax type' <+> "is a" <+> annotate SyntaxType (pretty param)
 
-data Scheme = ForAll (Set Name) (Qualified Type)
+data Scheme = ForAll [Name] (Qualified Type)
   deriving (Eq, Show)
 
 instance PrettySyntax Scheme where
   prettySyntax (ForAll vars type') =
     "for all "
-      <> hsep (map (annotate SyntaxType . pretty) $ Set.toList vars)
+      <> hsep (map (annotate SyntaxType . pretty) vars)
       <> "," <+> prettySyntax type'
